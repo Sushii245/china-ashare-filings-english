@@ -150,6 +150,14 @@ its records are pushed and charged in sequence, so the charge-limit check still
 sees one item at a time and stops without having paid for work it cannot
 deliver.
 
+## Validating the map
+
+The field map was written against the provider's documentation, not against a
+response, so until a real payload has been through `audit.py` every field claim
+is a claim about the docs. `VALIDATION.md` is the runbook: seven billed calls,
+chosen so each one settles a different question, captured to disk once and
+replayed offline from then on.
+
 ## Compliance boundary
 
 * Product and shop listing data only. No buyer identities, no reviewer names,

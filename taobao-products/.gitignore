@@ -4,3 +4,7 @@ __pycache__/
 .pytest_cache/
 storage/
 .env
+
+# Captured payloads are a scratch area; promote the ones worth keeping
+# into tests/fixtures/ deliberately.
+tests/fixtures/live/

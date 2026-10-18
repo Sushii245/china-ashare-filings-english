@@ -227,4 +227,5 @@ Taobao price monitoring, 1688 supplier data, Chinese e-commerce data,
 ---
 
 Running it locally or contributing? See [DESIGN.md](DESIGN.md) for why the
-acquisition layer looks the way it does.
+acquisition layer looks the way it does, and [VALIDATION.md](VALIDATION.md)
+for how the field map gets checked against a live provider.
