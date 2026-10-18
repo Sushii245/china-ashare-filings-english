@@ -375,3 +375,128 @@ def test_an_explicit_range_wins_over_the_derived_one(tmp_path):
     record = normalize(FixtureSource(tmp_path).fetch_product("1")).to_item()
     assert (record["price"]["value"], record["price"]["valueMax"]) == (128.0, 298.0)
     assert record["price"]["sourceTextCn"] == "128.00-298.00"
+
+
+def test_numeric_property_ids_never_become_attribute_names(tmp_path):
+    # props_list keys are pids. When the value carries no "axis:value" pair
+    # there is no axis name to be had, and emitting the pid as the name puts
+    # "1627207:28320": "黑色" in front of the buyer.
+    (tmp_path / "1.json").write_text(
+        '{"item": {"num_iid": "1", "title": "商品", "props_list": {'
+        '"1627207:28320": "颜色分类:黑色",'
+        '"20509:28314": "黑色",'
+        '"品牌": "Soundcore"}}}',
+        encoding="utf-8",
+    )
+    record = normalize(FixtureSource(tmp_path).fetch_product("1")).to_item()
+    assert record["attributesCn"] == {"颜色分类": "黑色", "品牌": "Soundcore"}
+
+
+# ------------------------------------------------- quantity-aware quoting
+
+@pytest.mark.parametrize(
+    "quantity,unit,subtotal,tier",
+    [
+        (2,    12.0,  24.0,    "2-99件 12.00"),
+        (99,   12.0,  1188.0,  "2-99件 12.00"),
+        (100,  10.5,  1050.0,  "100-999件 10.50"),
+        (999,  10.5,  10489.5, "100-999件 10.50"),
+        (1000, 9.0,   9000.0,  "≥1000件 9.00"),
+        (50_000, 9.0, 450_000.0, "≥1000件 9.00"),   # the top step is open-ended
+    ],
+)
+def test_the_ladder_is_walked_for_the_asked_quantity(source, quantity, unit, subtotal, tier):
+    product = normalize(source.fetch_product("612345678901"), quantity=quantity)
+    quote = product.to_item()["quote"]
+    assert quote["quantity"] == quantity
+    assert quote["unitPrice"]["value"] == unit
+    assert quote["subtotal"]["value"] == subtotal
+    assert quote["tierSourceTextCn"] == tier
+    assert quote["meetsMinimumOrder"] is True
+
+
+def test_a_quantity_below_the_minimum_is_flagged_but_still_priced(source):
+    # The MOQ on this listing is 2, and the ladder starts at 2, so one piece
+    # matches no step. Refusing to price it would be less useful than pricing
+    # it off the headline figure and flagging that the order cannot be placed
+    # as asked — which is what meetsMinimumOrder is for. tierSourceTextCn
+    # stays null, so the buyer can tell this did not come from a ladder step.
+    quote = normalize(source.fetch_product("612345678901"), quantity=1).to_item()["quote"]
+    assert quote["meetsMinimumOrder"] is False
+    assert quote["unitPrice"]["value"] == 12.0
+    assert quote["subtotal"]["value"] == 12.0
+    assert quote["tierSourceTextCn"] is None
+
+
+def test_a_flat_priced_listing_quotes_off_the_single_price(source):
+    # No ladder: the Taobao case. 555000111222 is ¥128 flat with MOQ 1.
+    quote = normalize(source.fetch_product("555000111222"), quantity=3).to_item()["quote"]
+    assert quote["unitPrice"]["value"] == 128.0
+    assert quote["subtotal"]["value"] == 384.0
+    assert quote["tierSourceTextCn"] is None
+    assert quote["meetsMinimumOrder"] is True
+
+
+def test_a_price_span_cannot_be_quoted_and_says_so(source):
+    # 600530677383 is 128-298 across SKUs. There is no single unit price to
+    # resolve to, and picking the low end would understate the order.
+    quote = normalize(source.fetch_product("600530677383"), quantity=10).to_item()["quote"]
+    assert quote["quantity"] == 10
+    assert quote["unitPrice"] is None
+    assert quote["subtotal"] is None
+
+
+def test_no_quantity_means_no_quote(source):
+    assert normalize(source.fetch_product("612345678901")).to_item()["quote"] is None
+
+
+def test_a_refused_listing_is_not_quoted(source):
+    product = normalize(source.fetch_product("999000111222"), quantity=100)
+    assert product.to_item()["quote"] is None
+
+
+def test_subtotal_is_rounded_to_cents(source):
+    quote = normalize(source.fetch_product("612345678901"), quantity=333).to_item()["quote"]
+    assert quote["subtotal"]["value"] == 3496.5      # 333 * 10.50
+
+
+def test_a_derived_subtotal_carries_no_source_text(source):
+    quote = normalize(source.fetch_product("612345678901"), quantity=100).to_item()["quote"]
+    assert quote["subtotal"]["sourceTextCn"] is None
+
+
+# ----------------------------------------------------------------- discount
+
+def test_discount_is_computed_from_the_struck_through_price(source):
+    # 128.00 against an original of 358.00.
+    record = item(source, "600530677383")
+    assert record["discountPct"] == 64.2
+
+
+def test_no_original_price_means_no_discount(source):
+    assert item(source, "612345678901")["discountPct"] is None
+
+
+def test_an_original_at_or_below_the_current_price_is_not_a_discount(tmp_path):
+    (tmp_path / "1.json").write_text(
+        '{"item": {"num_iid": "1", "title": "商品", "price": "100", '
+        '"orginal_price": "100"}}', encoding="utf-8",
+    )
+    assert normalize(FixtureSource(tmp_path).fetch_product("1")).to_item()["discountPct"] is None
+
+
+def test_sku_count_survives_dropping_the_sku_array(source):
+    # With includeSkus off the array is emptied, so skuCount is the only thing
+    # left that says the listing has variants. Deriving it from len(skus) made
+    # it vanish with them, which defeats the point of having it.
+    product = normalize(source.fetch_product("600530677383"))
+    assert product.to_item()["skuCount"] == 2
+    product.skus = []
+    assert product.to_item()["skuCount"] == 2
+
+
+def test_a_listing_with_no_variants_reports_no_sku_count(tmp_path):
+    (tmp_path / "1.json").write_text(
+        '{"item": {"num_iid": "1", "title": "商品", "price": "9.90"}}', encoding="utf-8"
+    )
+    assert normalize(FixtureSource(tmp_path).fetch_product("1")).to_item()["skuCount"] is None

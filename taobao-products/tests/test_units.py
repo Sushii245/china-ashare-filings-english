@@ -244,3 +244,27 @@ def test_myriad_multiplication_is_exact():
     assert units.parse_cn_number("2.3亿") == 230_000_000.0
     assert units.parse_cn_number("1.1万") == 11_000.0
     assert units.parse_cn_number("0.7万") == 7_000.0
+
+
+@pytest.mark.parametrize(
+    "text,approx",
+    [
+        ("1000多", True),           # 多 right after the number is a floor marker
+        ("1000多件", True),
+        ("已售500件 多色可选", False),  # 多 inside unrelated words is not
+        ("月销200 多规格可选", False),
+        ("已售2万+", True),
+        ("成交1203笔", False),
+    ],
+)
+def test_the_floor_marker_duo_needs_to_follow_a_digit(text, approx):
+    # "多" is a common character. Treating any occurrence as "this is a floor"
+    # marks exact figures approximate whenever the field carries other prose.
+    sales = units.parse_sales(text)
+    assert sales is not None
+    assert sales.is_approximate is approx
+
+
+def test_a_dispatch_range_reports_the_upper_bound():
+    # "付款后3-5天内发货" is a promise; the safe reading is the slower end.
+    assert units.parse_presale_days("付款后3-5天内发货") == 5

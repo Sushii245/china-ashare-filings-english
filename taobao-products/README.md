@@ -76,8 +76,28 @@ On 1688 you also get the wholesale ladder and the minimum order:
 ]
 ```
 
-`maxQty: null` is the open-ended top step. You can compute a landed unit cost
-for any quantity directly off this array.
+`maxQty: null` is the open-ended top step.
+
+### Or just tell it how many you want
+
+Set **Order quantity to price** and the Actor walks the ladder for you, which
+is the question you actually had:
+
+```json
+"quote": {
+  "quantity": 500,
+  "unitPrice": { "value": 10.5, "sourceTextCn": "10.50" },
+  "subtotal": { "value": 5250.0, "sourceTextCn": null },
+  "tierSourceTextCn": "100-999件 10.50",
+  "meetsMinimumOrder": true
+}
+```
+
+`tierSourceTextCn` shows which step it landed on, so the number is checkable.
+`meetsMinimumOrder` is false when your quantity is under the seller's 起订量 —
+the price is still quoted, because you still want to know it. A listing priced
+as a span across variants has no single unit price to resolve to, so
+`unitPrice` comes back null rather than quietly using the low end.
 
 ---
 
@@ -94,6 +114,8 @@ for any quantity directly off this array.
 | Seller scores | One number, or absent | Three aspects kept apart, each with a signed peer delta |
 | SKU axes | `"1627207:28320:颜色分类:黑色"` | `{"颜色分类": "黑色"}` |
 | Stock | A bare integer | Flagged `isApproximate`, because the platform publishes a rounded figure |
+| "What do 500 cost?" | Work it out yourself | `quote` walks the ladder and names the step it used |
+| Discount | Absent | `discountPct` against the struck-through price |
 | Verification | None | Every normalised field carries its Chinese source text |
 
 ## Typical uses
@@ -120,14 +142,16 @@ for any quantity directly off this array.
 | `keyword` | string | Search the catalogue instead of naming ids. |
 | `platform` | enum | `taobao`, `tmall` or `1688`. |
 | `maxProducts` | integer | Hard cap. Each listing returned with data is one billable event. |
-| `includeSkus` | boolean | Off keeps records small and returns the listing level only. |
+| `quantity` | integer | Price every listing at this many pieces: unit price off the ladder, subtotal, which tier, and whether it clears the MOQ. |
+| `includeSkus` | boolean | Off keeps records small and returns the listing level only. `skuCount` still reports how many variants there were. |
 
 ### Example input
 
 ```json
 {
-  "itemIds": ["600530677383"],
-  "platform": "taobao",
+  "itemIds": ["612345678901"],
+  "platform": "1688",
+  "quantity": 500,
   "maxProducts": 10,
   "includeSkus": true
 }

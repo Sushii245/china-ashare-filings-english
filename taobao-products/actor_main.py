@@ -42,6 +42,9 @@ ENV_API_KEY = "SOURCE_API_KEY"
 #: Set to a directory of recorded payloads to run without any provider.
 ENV_FIXTURES = "ACTOR_SOURCE_FIXTURES"
 
+#: Upper bound on paid search calls per run, whatever the limit asks for.
+MAX_SEARCH_PAGES = 20
+
 _ID_IN_QUERY = re.compile(r"[?&]id=(\d+)")
 _ID_IN_OFFER = re.compile(r"/offer/(\d+)")
 
@@ -129,14 +132,25 @@ def _resolve_ids(
         else:
             Actor.log.warning("No listing id found in URL, skipping: %s", url)
 
+    # Stop as soon as a page stops contributing. Providers repeat the first
+    # page when a keyword has fewer results than a page holds, and every call
+    # is billed, so "the page was not empty" is not enough to keep going.
     keyword = (actor_input.get("keyword") or "").strip()
     page = 1
-    while keyword and len(ids) < limit and page <= 20:
+    while keyword and len(ids) < limit and page <= MAX_SEARCH_PAGES:
+        before = len(ids)
         batch = data_source.search(keyword, page=page)
         if not batch:
             break
         for found in batch:
             add(found)
+        if len(ids) == before:
+            Actor.log.info(
+                "Search page %d returned nothing new; stopping at %d id(s).",
+                page,
+                len(ids),
+            )
+            break
         page += 1
 
     return ids
@@ -149,6 +163,8 @@ async def main() -> None:
         platform = (actor_input.get("platform") or "taobao").strip()
         limit = int(actor_input.get("maxProducts") or 10)
         include_skus = bool(actor_input.get("includeSkus", True))
+        raw_quantity = actor_input.get("quantity")
+        quantity = int(raw_quantity) if raw_quantity else None
         min_interval = max(1.0, float(actor_input.get("minRequestInterval") or 1))
 
         # A non-monetised Actor (and any non-PPE pricing model) charges nothing,
@@ -177,6 +193,8 @@ async def main() -> None:
             return
 
         Actor.log.info("Fetching %d listing(s) from %s.", len(item_ids), platform)
+        if quantity:
+            Actor.log.info("Pricing each listing at %d piece(s).", quantity)
 
         returned = skipped = 0
         hit_charge_limit = False
@@ -184,7 +202,7 @@ async def main() -> None:
             Actor.log.info("[%d/%d] %s", index, len(item_ids), item_id)
             try:
                 raw = await asyncio.to_thread(data_source.fetch_product, item_id)
-                product = normalize_mod.normalize(raw)
+                product = normalize_mod.normalize(raw, quantity=quantity)
             except Exception as exc:  # one bad listing must not kill the run
                 Actor.log.warning("%s failed: %s", item_id, exc)
                 raw = source_mod.RawProduct(
@@ -194,7 +212,7 @@ async def main() -> None:
                     status="upstream_error",
                     status_detail=str(exc),
                 )
-                product = normalize_mod.normalize(raw)
+                product = normalize_mod.normalize(raw, quantity=quantity)
 
             if not include_skus:
                 product.skus = []

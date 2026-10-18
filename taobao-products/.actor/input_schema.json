@@ -8,7 +8,9 @@
       "type": "array",
       "description": "Taobao / Tmall numeric item ids, or 1688 offer ids. Found in the listing URL: item.taobao.com/item.htm?id=600530677383.",
       "editor": "stringList",
-      "prefill": ["600530677383"],
+      "prefill": [
+        "600530677383"
+      ],
       "uniqueItems": true
     },
     "itemUrls": {
@@ -30,8 +32,24 @@
       "description": "Which catalogue to read. Affects the URL built for each record and the fields that apply (wholesale ladders and minimum order quantities are a 1688 concept).",
       "editor": "select",
       "default": "taobao",
-      "enum": ["taobao", "tmall", "1688"],
-      "enumTitles": ["Taobao", "Tmall", "1688 (wholesale)"]
+      "enum": [
+        "taobao",
+        "tmall",
+        "1688"
+      ],
+      "enumTitles": [
+        "Taobao",
+        "Tmall",
+        "1688 (wholesale)"
+      ]
+    },
+    "quantity": {
+      "title": "Order quantity to price",
+      "type": "integer",
+      "description": "How many pieces you intend to order. Each record then carries a quote: the unit price at that quantity resolved against the wholesale ladder, the subtotal, which tier it landed on, and whether the quantity clears the seller's minimum. Leave empty to skip.",
+      "editor": "number",
+      "minimum": 1,
+      "maximum": 1000000
     },
     "maxProducts": {
       "title": "Max products",

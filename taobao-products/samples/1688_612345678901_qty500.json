@@ -78,6 +78,25 @@
       "shipsFromCn": "浙江 义乌",
       "sourceTextCn": "运费10元"
     },
+    "quote": {
+      "quantity": 500,
+      "unitPrice": {
+        "value": 10.5,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": "10.50"
+      },
+      "subtotal": {
+        "value": 5250.0,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": null
+      },
+      "tierSourceTextCn": "100-999件 10.50",
+      "meetsMinimumOrder": true
+    },
+    "discountPct": null,
+    "skuCount": 1,
     "isPresale": null,
     "presaleShipsWithinDays": null,
     "shopNameCn": "义乌服装厂",
@@ -128,6 +147,6 @@
       "材质": "纯棉",
       "克重": "180g"
     },
-    "fetchedAt": "2026-10-18T15:30:30+00:00"
+    "fetchedAt": "2026-10-18T16:20:55+00:00"
   }
 ]

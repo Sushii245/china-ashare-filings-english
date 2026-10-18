@@ -104,6 +104,27 @@ class PriceTier:
 
 
 @dataclasses.dataclass(slots=True)
+class Quote:
+    """What this listing costs at a stated order quantity.
+
+    The question a sourcing buyer actually has is not "what is the price" but
+    "what does 500 pieces cost me". On 1688 that means walking the 阶梯价
+    ladder; the headline price is only the first step. Nothing else in this
+    category answers it, so the Actor does the walk and shows which step it
+    landed on.
+
+    ``unit_price`` is ``None`` when the listing gives a span across variants
+    and no ladder, because there is no single answer to resolve to.
+    """
+
+    quantity: int
+    unit_price: Money | None = None
+    subtotal: Money | None = None
+    tier_source_text_cn: str | None = None
+    meets_minimum_order: bool | None = None
+
+
+@dataclasses.dataclass(slots=True)
 class Shipping:
     """Delivery terms.
 
@@ -172,6 +193,8 @@ class Product:
     stock: Stock | None = None
 
     shipping: Shipping | None = None
+    quote: Quote | None = None
+    discount_pct: float | None = None
     is_presale: bool | None = None
     presale_ships_within_days: int | None = None
 
@@ -180,6 +203,10 @@ class Product:
     shop_scores: list[ShopScore] = dataclasses.field(default_factory=list)
 
     skus: list[Sku] = dataclasses.field(default_factory=list)
+    #: How many variants the listing had, recorded before the array can be
+    #: dropped. With includeSkus off this is the only thing left that says the
+    #: listing has variants at all, so it must not be derived from `skus`.
+    sku_count: int | None = None
     images: list[str] = dataclasses.field(default_factory=list)
     attributes_cn: dict[str, str] = dataclasses.field(default_factory=dict)
 
@@ -246,6 +273,19 @@ class Product:
                 if self.shipping
                 else None
             ),
+            "quote": (
+                {
+                    "quantity": self.quote.quantity,
+                    "unitPrice": _money(self.quote.unit_price),
+                    "subtotal": _money(self.quote.subtotal),
+                    "tierSourceTextCn": self.quote.tier_source_text_cn,
+                    "meetsMinimumOrder": self.quote.meets_minimum_order,
+                }
+                if self.quote
+                else None
+            ),
+            "discountPct": self.discount_pct,
+            "skuCount": self.sku_count,
             "isPresale": self.is_presale,
             "presaleShipsWithinDays": self.presale_ships_within_days,
             "shopNameCn": self.shop_name_cn,

@@ -10,11 +10,12 @@ that works on the sample and fails in production.
 from __future__ import annotations
 
 import re
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 import units
-from models import Money, Product, PriceTier, ShopScore, Sku, Status, Stock
+from models import Money, Product, PriceTier, Quote, ShopScore, Sku, Status, Stock
 from source import RawProduct, SourceConfig, dig
 
 #: 1688 item ids live under a different host than Taobao's.
@@ -23,6 +24,11 @@ _URL_TEMPLATES = {
     "tmall": "https://detail.tmall.com/item.htm?id={item_id}",
     "1688": "https://detail.1688.com/offer/{item_id}.html",
 }
+
+
+#: A property-id key, e.g. "1627207:28320" or "20509". Digits and colons
+#: only, so a real axis name like 品牌 or "Ships from" never matches.
+_PROPERTY_ID = re.compile(r"[\d:]+")
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -142,6 +148,11 @@ def _normalize_attributes(raw: Any) -> dict[str, str]:
 
     Providers send this as ``{"1627207:28320": "颜色分类:黑色"}``, as
     ``[{"name": …, "value": …}]``, or as a plain ``{axis: value}`` map.
+
+    The first shape keys by property id, so the axis name has to come out of
+    the value. When it does not carry one, there is no axis name to be had and
+    the entry is dropped: emitting the id would put ``"1627207:28320": "黑色"``
+    in front of a buyer who cannot act on it.
     """
     attributes: dict[str, str] = {}
     if isinstance(raw, dict):
@@ -157,7 +168,8 @@ def _normalize_attributes(raw: Any) -> dict[str, str]:
                 if axis and val:
                     attributes[axis] = val
                     continue
-            attributes[str(key)] = text
+            if not _PROPERTY_ID.fullmatch(str(key).strip()):
+                attributes[str(key)] = text
         return attributes
     for entry in _as_list(raw):
         if not isinstance(entry, dict):
@@ -243,7 +255,8 @@ def _normalize_tiers(raw: Any) -> list[PriceTier]:
     return tiers
 
 
-def _platform_for(raw: RawProduct, title: str | None) -> str:
+def _platform_for(raw: RawProduct) -> str:
+    """Trust the source's platform when it names one this project knows."""
     if raw.platform in _URL_TEMPLATES:
         return raw.platform
     return "taobao"
@@ -253,14 +266,18 @@ def normalize(
     raw: RawProduct,
     *,
     config: SourceConfig | None = None,
+    quantity: int | None = None,
 ) -> Product:
     """Turn one provider payload into the record the buyer receives.
 
     A payload that is missing or that upstream refused still produces a record,
     carrying ``status`` and ``statusDetail``. Those are not charged.
+
+    ``quantity``, when given, adds a :class:`Quote`: the unit price and
+    subtotal for that many pieces, resolved against the wholesale ladder.
     """
     field_map = (config or SourceConfig(base_url="")).field_map
-    platform = _platform_for(raw, None)
+    platform = _platform_for(raw)
     url = _URL_TEMPLATES[platform].format(item_id=raw.item_id)
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -321,7 +338,7 @@ def normalize(
     if presale_text is not None:
         is_presale = "预售" in units.normalize_text(presale_text)
 
-    return Product(
+    product = Product(
         item_id=str(_first_str(field("item_id")) or raw.item_id),
         platform=platform,  # type: ignore[arg-type]
         url=url,
@@ -349,7 +366,64 @@ def normalize(
         shop_id=_first_str(field("shop_id")),
         shop_scores=_normalize_shop_scores(field("shop_scores")),
         skus=skus,
+        sku_count=len(skus) or None,
         images=_normalize_images(field("images")),
         attributes_cn=_normalize_attributes(field("properties")),
         fetched_at=now,
     )
+
+    product.discount_pct = _discount_pct(product.price, product.original_price)
+    if quantity is not None and quantity > 0:
+        product.quote = _build_quote(product, quantity)
+    return product
+
+
+def _build_quote(product: Product, quantity: int) -> Quote:
+    """Price ``quantity`` pieces against the ladder, or the flat price.
+
+    Walks the 阶梯价 steps for the one covering ``quantity``; the top step is
+    open-ended so any larger order lands there. Falls back to the listing
+    price when there is no ladder, which is the normal Taobao case.
+    """
+    quote = Quote(quantity=quantity)
+
+    moq = product.min_order_quantity
+    if moq is not None:
+        # Below the seller's minimum the order cannot be placed as asked. The
+        # price is still worth showing, so this is a flag, not a refusal.
+        quote.meets_minimum_order = quantity >= moq.value
+
+    for tier in product.price_tiers:
+        if quantity < tier.min_qty:
+            continue
+        if tier.max_qty is not None and quantity > tier.max_qty:
+            continue
+        quote.unit_price = tier.unit_price
+        quote.tier_source_text_cn = tier.source_text_cn
+        break
+
+    if quote.unit_price is None and product.price is not None:
+        # A span across variants has no single unit price to quote.
+        if not product.price.is_range:
+            quote.unit_price = product.price
+
+    if quote.unit_price is not None:
+        # Derived, so it carries no source text: the listing never printed it.
+        quote.subtotal = Money(value=round(quote.unit_price.value * quantity, 2))
+
+    return quote
+
+
+def _discount_pct(price: Money | None, original: Money | None) -> float | None:
+    """How far below the struck-through price the current one sits.
+
+    Compares the low end of each, so a listing that discounts a whole span is
+    still comparable. Returns ``None`` unless the original is genuinely higher
+    — a listing with the two equal is not on sale, and one where the "original"
+    is lower is not something to editorialise about.
+    """
+    if price is None or original is None or original.value <= 0:
+        return None
+    if original.value <= price.value:
+        return None
+    return round((original.value - price.value) / original.value * 100, 1)

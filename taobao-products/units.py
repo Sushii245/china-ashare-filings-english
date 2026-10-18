@@ -187,9 +187,16 @@ def parse_sales(value: str | None) -> Sales | None:
             unit = mapped_unit
             break
 
-    # "+" and 以上 both mean the real figure is at least this. Taobao also
-    # writes 万+ which NFKC leaves intact.
-    is_approx = "+" in text or "以上" in text or "多" in text
+    # "+" and 以上 both mean the real figure is at least this. So does 多,
+    # but only directly after the number — 多 is a common character, and
+    # "月销200 多规格可选" states an exact figure beside unrelated prose.
+    is_approx = (
+        "+" in text
+        or "以上" in text
+        # No whitespace allowed: "1000多" is a floor, "200 多规格可选" is an
+        # exact figure next to an unrelated word.
+        or re.search(r"\d多", text) is not None
+    )
 
     return Sales(
         count=int(count),

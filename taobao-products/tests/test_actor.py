@@ -108,3 +108,30 @@ def test_1688_platform_selects_its_own_endpoints(monkeypatch):
     )
     assert built.config.detail_path == "/1688/item_get"
     assert built.platform == "1688"
+
+
+class PageIgnoringSource:
+    """A provider that returns the same results whatever page you ask for.
+
+    Real ones do this when a keyword has fewer results than a page holds, and
+    every call is billed, so the loop has to notice.
+    """
+
+    def __init__(self, ids: list[str]) -> None:
+        self._ids = ids
+        self.calls = 0
+
+    def fetch_product(self, item_id: str):  # pragma: no cover - not used here
+        raise AssertionError("not expected")
+
+    def search(self, keyword: str, *, page: int = 1) -> list[str]:
+        self.calls += 1
+        return list(self._ids)
+
+
+def test_a_page_that_adds_nothing_new_stops_the_search():
+    # Otherwise this spends 20 paid upstream calls collecting the same 3 ids.
+    source = PageIgnoringSource(["1", "2", "3"])
+    ids = actor_main._resolve_ids({"keyword": "x"}, source, limit=100)
+    assert ids == ["1", "2", "3"]
+    assert source.calls == 2, f"made {source.calls} search calls, expected 2"

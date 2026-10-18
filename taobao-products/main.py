@@ -30,6 +30,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--platform", default="taobao", choices=("taobao", "tmall", "1688"))
     parser.add_argument("--keyword", help="search instead of naming ids")
     parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument(
+        "--quantity", type=int,
+        help="price each listing at this many pieces (walks the 阶梯价 ladder)",
+    )
     parser.add_argument("--out", help="write JSON here instead of stdout")
     return parser
 
@@ -68,7 +72,9 @@ def main(argv: list[str] | None = None) -> int:
 
     records = []
     for item_id in item_ids:
-        product = normalize_mod.normalize(data_source.fetch_product(item_id))
+        product = normalize_mod.normalize(
+            data_source.fetch_product(item_id), quantity=args.quantity
+        )
         logging.info("%s -> %s", item_id, product.status)
         records.append(product.to_item())
 

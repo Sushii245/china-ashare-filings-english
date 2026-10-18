@@ -49,6 +49,9 @@
       "shipsFromCn": "广东 深圳",
       "sourceTextCn": "包邮"
     },
+    "quote": null,
+    "discountPct": 64.2,
+    "skuCount": 2,
     "isPresale": false,
     "presaleShipsWithinDays": null,
     "shopNameCn": "数码旗舰店",
@@ -117,6 +120,6 @@
       "版本": "标准版",
       "品牌": "Soundcore"
     },
-    "fetchedAt": "2026-10-18T15:30:30+00:00"
+    "fetchedAt": "2026-10-18T16:20:55+00:00"
   }
 ]
