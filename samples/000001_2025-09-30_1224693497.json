@@ -1,0 +1,102 @@
+{
+  "announcement": {
+    "stock_code": "000001",
+    "stock_name": "平安银行",
+    "org_id": "gssz0000001",
+    "announcement_id": "1224693497",
+    "title_cn": "2025年半年度权益分派实施公告",
+    "publish_date": "2025-09-30",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-09-30/1224693497.PDF",
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000001&announcementId=1224693497&orgId=gssz0000001&announcementTime=2025-09-30",
+    "adjunct_size_kb": 143,
+    "adjunct_type": "PDF",
+    "announcement_time_ms": 1759161600000,
+    "raw_type_codes": "01010503||010112||011301"
+  },
+  "pdf": {
+    "path": "data/pdfs/000001_2025-09-30_1224693497.pdf",
+    "page_count": 3,
+    "char_count": 1690,
+    "chars_per_page": 563.3,
+    "is_scanned": false,
+    "status": "ok",
+    "table_count": 1,
+    "prompt_chars": 1729,
+    "truncated": false
+  },
+  "status": "ok",
+  "extraction": {
+    "stock_code": "000001",
+    "company_name_cn": "平安银行",
+    "company_name_en": null,
+    "announcement_type": "dividend",
+    "title_en": "Implementation Announcement on the 2025 Interim Equity Distribution','stock_code_placeholder'",
+    "publish_date": "2025-09-30",
+    "summary_en": "Ping An Bank will pay an interim 2025 cash dividend of RMB 2.36 per 10 shares (tax inclusive), totalling RMB 4.58 billion, with no bonus shares or capital reserve conversion, as approved by the 42nd meeting of the 12th Board on 22 August 2025. The distribution is based on 19,405,918,198 shares outstanding at 30 June 2025. The share registration date is 14 October 2025 and the ex-dividend date is 15 October 2025. Certain holders, including Hong Kong and QFII investors and restricted-share individuals, receive RMB 2.124 per 10 shares after withholding, and tax on restricted shares held 1 year or less is subject to top-up payments.",
+    "key_figures": [
+      {
+        "label": "cash dividend per 10 shares (interim 2025, tax inclusive)",
+        "value": 2.36,
+        "unit": "元",
+        "currency": null,
+        "source_text_cn": "每10 股派发现金股利人民币2.36 元（含税），合计派发现金股利人民币45.80",
+        "value_base": 2.36,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "total cash dividend payout",
+        "value": 45.8,
+        "unit": "亿元",
+        "currency": "CNY",
+        "source_text_cn": "每10 股派发现金股利人民币2.36 元（含税），合计派发现金股利人民币45.80",
+        "value_base": 4580000000.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "total share capital as of 2025-06-30 (base for distribution)",
+        "value": 19405918198.0,
+        "unit": "股",
+        "currency": null,
+        "source_text_cn": "以本公司2025 年6 月30 日的总股本19,405,918,198 股为基数",
+        "value_base": 19405918198.0,
+        "unit_base": "股",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "cash dividend per 10 shares (after tax withholding, Hong Kong/QFII and certain holders)",
+        "value": 2.124,
+        "unit": "元",
+        "currency": null,
+        "source_text_cn": "向全体股东每10 股派2.3600 元人民币现金（含税；扣税后，通过深股通持有股份的香港市场投资者、境外机构（含QFII、RQFII）以及持有首发前限售股的个人和证券投资基金每10 股派2.1240 元",
+        "value_base": 2.124,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      }
+    ],
+    "risk_flags": [],
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000001&announcementId=1224693497&orgId=gssz0000001&announcementTime=2025-09-30",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-09-30/1224693497.PDF"
+  },
+  "usage": {
+    "model": "claude-haiku-5-5",
+    "input_tokens": 4554,
+    "output_tokens": 790,
+    "cost_usd": 0.00085,
+    "latency_s": 5.83,
+    "stop_reason": "end_turn"
+  }
+}

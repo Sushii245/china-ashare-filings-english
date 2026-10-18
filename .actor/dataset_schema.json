@@ -1,0 +1,41 @@
+{
+  "actorSpecification": 1,
+  "fields": {},
+  "views": {
+    "overview": {
+      "title": "Filings",
+      "transformation": {
+        "fields": ["publishDate", "stockCode", "companyNameCn", "announcementType", "titleEn", "summaryEn", "riskFlags", "pdfUrl", "sourceUrl"]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "publishDate": { "label": "Date", "format": "text" },
+          "stockCode": { "label": "Code", "format": "text" },
+          "companyNameCn": { "label": "Company", "format": "text" },
+          "announcementType": { "label": "Type", "format": "text" },
+          "titleEn": { "label": "Title (EN)", "format": "text" },
+          "summaryEn": { "label": "Summary (EN)", "format": "text" },
+          "riskFlags": { "label": "Risk flags", "format": "array" },
+          "pdfUrl": { "label": "PDF", "format": "link" },
+          "sourceUrl": { "label": "CNINFO page", "format": "link" }
+        }
+      }
+    },
+    "figures": {
+      "title": "Key figures",
+      "transformation": {
+        "fields": ["publishDate", "stockCode", "announcementType", "keyFigures"]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "publishDate": { "label": "Date", "format": "text" },
+          "stockCode": { "label": "Code", "format": "text" },
+          "announcementType": { "label": "Type", "format": "text" },
+          "keyFigures": { "label": "Figures (value, unit, source sentence)", "format": "array" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "actorSpecification": 1,
+  "name": "china-ashare-filings-english",
+  "title": "China A-Share Filings to English (CNINFO)",
+  "description": "Turns Chinese A-share regulatory filings from CNINFO into English summaries and structured, source-cited financial data.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "dockerfile": "../Dockerfile",
+  "input": "./input_schema.json",
+  "storages": {
+    "dataset": "./dataset_schema.json"
+  },
+  "environmentVariables": {
+    "ANTHROPIC_API_KEY": "@anthropic-api-key",
+    "ANTHROPIC_BASE_URL": "https://aihubmix.com"
+  },
+  "defaultRunOptions": {
+    "memoryMbytes": 1024,
+    "timeoutSecs": 3600
+  }
+}

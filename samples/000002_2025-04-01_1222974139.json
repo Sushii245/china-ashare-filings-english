@@ -1,0 +1,157 @@
+{
+  "announcement": {
+    "stock_code": "000002",
+    "stock_name": "万科A",
+    "org_id": "gssz0000002",
+    "announcement_id": "1222974139",
+    "title_cn": "2024年年度报告",
+    "publish_date": "2025-04-01",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-04-01/1222974139.PDF",
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1222974139&orgId=gssz0000002&announcementTime=2025-04-01",
+    "adjunct_size_kb": 9677,
+    "adjunct_type": "PDF",
+    "announcement_time_ms": 1743436800000,
+    "raw_type_codes": "01010503||010112||010301"
+  },
+  "pdf": {
+    "path": "data/pdfs/000002_2025-04-01_1222974139.pdf",
+    "page_count": 327,
+    "char_count": 433847,
+    "chars_per_page": 1326.7,
+    "is_scanned": false,
+    "status": "ok",
+    "table_count": 11,
+    "prompt_chars": 23878,
+    "truncated": true
+  },
+  "status": "ok",
+  "extraction": {
+    "stock_code": "000002",
+    "company_name_cn": "万科A",
+    "company_name_en": "China Vanke Co., Ltd.",
+    "announcement_type": "earnings_report",
+    "title_en": "2024 Annual Report",
+    "publish_date": "2025-04-01",
+    "summary_en": "China Vanke's 2024 annual report shows operating revenue of 343.18 billion yuan, down 26.32% year on year, and a net loss attributable to shareholders of 49.48 billion yuan, versus a profit of 12.16 billion yuan in 2023. Basic loss per share was 4.17 yuan. The board proposed no cash dividend, no bonus share issue and no capitalisation of reserves for 2024, subject to shareholder meeting approval. Total assets fell to 1,286.26 billion yuan and net assets attributable to shareholders fell to 202.67 billion yuan, with an asset-liability ratio of 73.66%. The shareholder letter acknowledges liquidity pressure and states the company is managing risks and restructuring its financing model.",
+    "key_figures": [
+      {
+        "label": "Operating revenue 2024",
+        "value": 343176440712.96,
+        "unit": "元",
+        "currency": "CNY",
+        "source_text_cn": "营业收入 | 343,176,440,712.96 | 465,739,076,702.23 | -26.32% | 503,838,367,358.76",
+        "value_base": 343176440712.96,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Net profit attributable to shareholders 2024 (loss)",
+        "value": -49478429211.96,
+        "unit": "元",
+        "currency": "CNY",
+        "source_text_cn": "归属于上市公司股东的净利润 | (49,478,429,211.96) | 12,162,684,368.86 | -506.81% | 22,688,551,801.52",
+        "value_base": -49478429211.96,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Basic earnings per share 2024",
+        "value": -4.17,
+        "unit": "元",
+        "currency": "CNY",
+        "source_text_cn": "基本每股收益 | (4.17) | 1.03 | -504.23% | 1.96",
+        "value_base": -4.17,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Cash dividend per share 2024",
+        "value": 0.0,
+        "unit": null,
+        "currency": null,
+        "source_text_cn": "公司2024 年度分红派息预案：2024 年度公司不派发股息，不送红股，也不进行资本公积转增股本。",
+        "value_base": null,
+        "unit_base": null,
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Total assets end 2024",
+        "value": 1286259859765.82,
+        "unit": "元",
+        "currency": "CNY",
+        "source_text_cn": "资产总额 | 1,286,259,859,765.82 | 1,504,850,172,117.83 | -14.53% | 1,757,804,935,896.04",
+        "value_base": 1286259859765.82,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Net assets attributable to shareholders end 2024",
+        "value": 202666487973.0,
+        "unit": "元",
+        "currency": "CNY",
+        "source_text_cn": "归属于上市公司股东的净资产 | 202,666,487,973.00 | 250,784,613,404.38 | -19.19% | 243,325,374,922.33",
+        "value_base": 202666487973.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Asset-liability ratio end 2024",
+        "value": 73.66,
+        "unit": "%",
+        "currency": null,
+        "source_text_cn": "资产负债率 | 73.66% | 73.22% | 上升0.44 个百分点 | 76.92%",
+        "value_base": 73.66,
+        "unit_base": "%",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Total sales 2024",
+        "value": 2460.2,
+        "unit": "亿元",
+        "currency": "CNY",
+        "source_text_cn": "2024 年实现营业收入3,431.8 亿元，完成超过18 万套房子的高品质交付，实现销售额2,460.2 亿元，顺利兑付292 亿元境内外公开债及ABS",
+        "value_base": 246019999999.99997,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      }
+    ],
+    "risk_flags": [
+      "Net loss of 49.48 billion yuan in 2024 with liquidity pressure described in shareholder letter",
+      "Risk management and investment risks disclosed by company, see Section 5 risk management"
+    ],
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1222974139&orgId=gssz0000002&announcementTime=2025-04-01",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-04-01/1222974139.PDF"
+  },
+  "usage": {
+    "model": "claude-haiku-5-5",
+    "input_tokens": 23311,
+    "output_tokens": 1207,
+    "cost_usd": 0.002935,
+    "latency_s": 8.29,
+    "stop_reason": "end_turn"
+  }
+}

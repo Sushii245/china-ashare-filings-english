@@ -1,0 +1,144 @@
+{
+  "announcement": {
+    "stock_code": "000002",
+    "stock_name": "万科A",
+    "org_id": "gssz0000002",
+    "announcement_id": "1224165034",
+    "title_cn": "2025年半年度业绩预告",
+    "publish_date": "2025-07-15",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-07-15/1224165034.PDF",
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1224165034&orgId=gssz0000002&announcementTime=2025-07-15",
+    "adjunct_size_kb": 427,
+    "adjunct_type": "PDF",
+    "announcement_time_ms": 1752508800000,
+    "raw_type_codes": "01010503||010112||012111"
+  },
+  "pdf": {
+    "path": "data/pdfs/000002_2025-07-15_1224165034.pdf",
+    "page_count": 2,
+    "char_count": 1380,
+    "chars_per_page": 690.0,
+    "is_scanned": false,
+    "status": "ok",
+    "table_count": 1,
+    "prompt_chars": 1413,
+    "truncated": false
+  },
+  "status": "ok",
+  "extraction": {
+    "stock_code": "000002",
+    "company_name_cn": "万科A",
+    "company_name_en": null,
+    "announcement_type": "earnings_report",
+    "title_en": "2025 Semi-Annual Performance Forecast",
+    "publish_date": "2025-07-15",
+    "summary_en": "Vanke expects a net loss attributable to shareholders of RMB 10.0-12.0 billion for H1 2025 (January 1 to June 30, 2025), versus a loss of RMB 9.85 billion in the prior-year period. The net loss after non-recurring items is forecast at RMB 9.5-11.5 billion, and basic loss per share at RMB 0.8433-1.0120. The company attributes the loss to a sharp drop in property development settlements, low gross margins, higher new asset impairment provisions, and some asset and equity transactions priced below book value. The forecast is unaudited and preliminary, and the company reports H1 sales of RMB 69.11 billion and H1 financing of RMB 24.9 billion, excluding shareholder loans.",
+    "key_figures": [
+      {
+        "label": "Net loss attributable to shareholders, low end of forecast range",
+        "value": 1000000.0,
+        "unit": "万元",
+        "currency": "CNY",
+        "source_text_cn": "亏损：1,000,000 万元-1,200,000 万元 | 亏损：985,249.96 万元",
+        "value_base": 10000000000.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Net loss attributable to shareholders, high end of forecast range",
+        "value": 1200000.0,
+        "unit": "万元",
+        "currency": "CNY",
+        "source_text_cn": "亏损：1,000,000 万元-1,200,000 万元 | 亏损：985,249.96 万元",
+        "value_base": 12000000000.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Prior-year H1 net loss attributable to shareholders",
+        "value": 985249.96,
+        "unit": "万元",
+        "currency": "CNY",
+        "source_text_cn": "亏损：1,000,000 万元-1,200,000 万元 | 亏损：985,249.96 万元",
+        "value_base": 9852499600.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Net loss after non-recurring items, low end of forecast range",
+        "value": 950000.0,
+        "unit": "万元",
+        "currency": "CNY",
+        "source_text_cn": "亏损：950,000 万元-1,150,000 万元 | 亏损：761,304.92 万元",
+        "value_base": 9500000000.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Basic loss per share, low end of forecast range",
+        "value": 0.8433,
+        "unit": "元/股",
+        "currency": "CNY",
+        "source_text_cn": "亏损：0.8433 元/股-1.0120 元/股 | 亏损：0.8309 元/股",
+        "value_base": 0.8433,
+        "unit_base": "元/股",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Sales amount in H1 2025",
+        "value": 691.1,
+        "unit": "亿元",
+        "currency": "CNY",
+        "source_text_cn": "实现销售金额691.1 亿元，回款率超过100%；",
+        "value_base": 69110000000.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "New and refinanced financing in H1 2025 (excluding shareholder loans)",
+        "value": 249.0,
+        "unit": "亿元",
+        "currency": "CNY",
+        "source_text_cn": "内新增融资和再融资249 亿元（不含股东借款）；",
+        "value_base": 24900000000.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      }
+    ],
+    "risk_flags": [
+      "Preliminary internal estimate; final figures subject to the formal 2025 half-year report",
+      "Forecast is unaudited by the certified accounting firm"
+    ],
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1224165034&orgId=gssz0000002&announcementTime=2025-07-15",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-07-15/1224165034.PDF"
+  },
+  "usage": {
+    "model": "claude-haiku-5-5",
+    "input_tokens": 4293,
+    "output_tokens": 2272,
+    "cost_usd": 0.001565,
+    "latency_s": 13.4,
+    "stop_reason": "end_turn"
+  }
+}

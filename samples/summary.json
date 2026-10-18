@@ -1,0 +1,148 @@
+{
+  "count": 6,
+  "ok": 6,
+  "skipped": [],
+  "total_cost_usd": 0.009234,
+  "total_input_tokens": 51520,
+  "total_output_tokens": 8165,
+  "items": [
+    {
+      "stock_code": "000001",
+      "stock_name": "平安银行",
+      "title_cn": "2025年半年度权益分派实施公告",
+      "publish_date": "2025-09-30",
+      "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-09-30/1224693497.PDF",
+      "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000001&announcementId=1224693497&orgId=gssz0000001&announcementTime=2025-09-30",
+      "status": "ok",
+      "announcement_type": "dividend",
+      "pages": 3,
+      "pdf_chars": 1690,
+      "prompt_chars": 1729,
+      "truncated": false,
+      "key_figure_count": 4,
+      "usage": {
+        "model": "claude-haiku-5-5",
+        "input_tokens": 4554,
+        "output_tokens": 790,
+        "cost_usd": 0.00085,
+        "latency_s": 5.83,
+        "stop_reason": "end_turn"
+      }
+    },
+    {
+      "stock_code": "000002",
+      "stock_name": "万科A",
+      "title_cn": "2024年年度报告",
+      "publish_date": "2025-04-01",
+      "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-04-01/1222974139.PDF",
+      "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1222974139&orgId=gssz0000002&announcementTime=2025-04-01",
+      "status": "ok",
+      "announcement_type": "earnings_report",
+      "pages": 327,
+      "pdf_chars": 433847,
+      "prompt_chars": 23878,
+      "truncated": true,
+      "key_figure_count": 8,
+      "usage": {
+        "model": "claude-haiku-5-5",
+        "input_tokens": 23311,
+        "output_tokens": 1207,
+        "cost_usd": 0.002935,
+        "latency_s": 8.29,
+        "stop_reason": "end_turn"
+      }
+    },
+    {
+      "stock_code": "000002",
+      "stock_name": "万科A",
+      "title_cn": "2025年半年度业绩预告",
+      "publish_date": "2025-07-15",
+      "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-07-15/1224165034.PDF",
+      "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1224165034&orgId=gssz0000002&announcementTime=2025-07-15",
+      "status": "ok",
+      "announcement_type": "earnings_report",
+      "pages": 2,
+      "pdf_chars": 1380,
+      "prompt_chars": 1413,
+      "truncated": false,
+      "key_figure_count": 7,
+      "usage": {
+        "model": "claude-haiku-5-5",
+        "input_tokens": 4293,
+        "output_tokens": 2272,
+        "cost_usd": 0.001565,
+        "latency_s": 13.4,
+        "stop_reason": "end_turn"
+      }
+    },
+    {
+      "stock_code": "000002",
+      "stock_name": "万科A",
+      "title_cn": "关于深铁集团向公司提供不超过16.66亿元借款暨关联交易的公告",
+      "publish_date": "2025-11-12",
+      "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-11-12/1224799803.PDF",
+      "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1224799803&orgId=gssz0000002&announcementTime=2025-11-12",
+      "status": "ok",
+      "announcement_type": "related_party_transaction",
+      "pages": 5,
+      "pdf_chars": 2913,
+      "prompt_chars": 2954,
+      "truncated": false,
+      "key_figure_count": 6,
+      "usage": {
+        "model": "claude-haiku-5-5",
+        "input_tokens": 5891,
+        "output_tokens": 1014,
+        "cost_usd": 0.001096,
+        "latency_s": 6.53,
+        "stop_reason": "end_turn"
+      }
+    },
+    {
+      "stock_code": "002932",
+      "stock_name": "明德生物",
+      "title_cn": "关于筹划重大资产重组暨签署《股权收购意向协议》的提示性公告",
+      "publish_date": "2025-12-31",
+      "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-12-31/1224910283.PDF",
+      "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=002932&announcementId=1224910283&orgId=gfbj0430591&announcementTime=2025-12-31",
+      "status": "ok",
+      "announcement_type": "acquisition",
+      "pages": 7,
+      "pdf_chars": 5767,
+      "prompt_chars": 5880,
+      "truncated": false,
+      "key_figure_count": 4,
+      "usage": {
+        "model": "claude-haiku-5-5",
+        "input_tokens": 8954,
+        "output_tokens": 814,
+        "cost_usd": 0.001302,
+        "latency_s": 6.36,
+        "stop_reason": "end_turn"
+      }
+    },
+    {
+      "stock_code": "300691",
+      "stock_name": "联合光电",
+      "title_cn": "关于公司控股股东、实际控制人部分股份质押的公告",
+      "publish_date": "2025-12-31",
+      "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-12-31/1224914201.PDF",
+      "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=300691&announcementId=1224914201&orgId=9900032804&announcementTime=2025-12-31",
+      "status": "ok",
+      "announcement_type": "share_pledge",
+      "pages": 2,
+      "pdf_chars": 1708,
+      "prompt_chars": 1753,
+      "truncated": false,
+      "key_figure_count": 6,
+      "usage": {
+        "model": "claude-haiku-5-5",
+        "input_tokens": 4517,
+        "output_tokens": 2068,
+        "cost_usd": 0.001486,
+        "latency_s": 12.07,
+        "stop_reason": "end_turn"
+      }
+    }
+  ]
+}

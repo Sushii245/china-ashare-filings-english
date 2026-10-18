@@ -1,0 +1,131 @@
+{
+  "announcement": {
+    "stock_code": "000002",
+    "stock_name": "万科A",
+    "org_id": "gssz0000002",
+    "announcement_id": "1224799803",
+    "title_cn": "关于深铁集团向公司提供不超过16.66亿元借款暨关联交易的公告",
+    "publish_date": "2025-11-12",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-11-12/1224799803.PDF",
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1224799803&orgId=gssz0000002&announcementTime=2025-11-12",
+    "adjunct_size_kb": 159,
+    "adjunct_type": "PDF",
+    "announcement_time_ms": 1762876800000,
+    "raw_type_codes": "01010503||010112||011709||011719"
+  },
+  "pdf": {
+    "path": "data/pdfs/000002_2025-11-12_1224799803.pdf",
+    "page_count": 5,
+    "char_count": 2913,
+    "chars_per_page": 582.6,
+    "is_scanned": false,
+    "status": "ok",
+    "table_count": 0,
+    "prompt_chars": 2954,
+    "truncated": false
+  },
+  "status": "ok",
+  "extraction": {
+    "stock_code": "000002",
+    "company_name_cn": "万科A",
+    "company_name_en": null,
+    "announcement_type": "related_party_transaction",
+    "title_en": "Announcement on Shenzhen Metro Group Providing Up to CNY 1.666 Billion in Loans to the Company, Constituting a Related-Party Transaction",
+    "publish_date": "2025-11-12",
+    "summary_en": "Shenzhen Metro Group, the company's largest shareholder holding 27.18%, will provide a loan of up to CNY 1.666 billion to China Vanke, to be used to repay principal and interest on the company's public-market bonds. The loan carries a term of up to 3 years, priced at 1-year LPR minus 66 basis points (currently 2.34%), with interest settled quarterly. Shenzhen Metro Group may require the company to provide guarantees, including asset pledges, subject to shareholder approval at an extraordinary general meeting scheduled for 20 November 2025. The board approved the transaction on 10 November 2025 with related directors abstaining, and independent directors endorsed it.",
+    "key_figures": [
+      {
+        "label": "Maximum shareholder loan amount from Shenzhen Metro Group",
+        "value": 16.66,
+        "unit": "亿元",
+        "currency": "CNY",
+        "source_text_cn": "提供不超过16.66亿元借款（以下简称“股东借款”）。",
+        "value_base": 1666000000.0,
+        "unit_base": "元",
+        "source_text_cn_model": "1．经协商，万科企业股份有限公司（以下简称“公司”或“万科”）第一",
+        "source_text_recovered": true,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Shenzhen Metro Group shareholding in the company",
+        "value": 27.18,
+        "unit": "%",
+        "currency": null,
+        "source_text_cn": "2．截至目前，深铁集团持有公司27.18%股权，深铁集团构成公司的关联方。",
+        "value_base": 27.18,
+        "unit_base": "%",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Loan term maximum",
+        "value": 3.0,
+        "unit": "年",
+        "currency": null,
+        "source_text_cn": "3．借款期限：不超过3年。分次提款的，自首次提款日起算，贷款的最后可",
+        "value_base": null,
+        "unit_base": null,
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Loan pricing spread below 1-year LPR",
+        "value": 66.0,
+        "unit": "个基点",
+        "currency": null,
+        "source_text_cn": "4．借款利率：定价基准为每笔借款提款日前一工作日全国银行间同业拆借中心公布的1年期贷款市场报价利率（LPR），浮动点数为减66个基点，目前为2.34%。",
+        "value_base": null,
+        "unit_base": null,
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Current loan interest rate",
+        "value": 2.34,
+        "unit": "%",
+        "currency": null,
+        "source_text_cn": "4．借款利率：定价基准为每笔借款提款日前一工作日全国银行间同业拆借中心公布的1年期贷款市场报价利率（LPR），浮动点数为减66个基点，目前为2.34%。",
+        "value_base": 2.34,
+        "unit_base": "%",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Cumulative loans from Shenzhen Metro Group (excluding this loan)",
+        "value": 291.3,
+        "unit": "亿元",
+        "currency": "CNY",
+        "source_text_cn": "2．深铁集团已累计向公司提供借款291.3亿元（不含本次借款）。其中，自公",
+        "value_base": 29130000000.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      }
+    ],
+    "risk_flags": [
+      "Shareholder loan may require collateral or guarantee by the company if requested by Shenzhen Metro Group"
+    ],
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=000002&announcementId=1224799803&orgId=gssz0000002&announcementTime=2025-11-12",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-11-12/1224799803.PDF"
+  },
+  "usage": {
+    "model": "claude-haiku-5-5",
+    "input_tokens": 5891,
+    "output_tokens": 1014,
+    "cost_usd": 0.001096,
+    "latency_s": 6.53,
+    "stop_reason": "end_turn"
+  }
+}

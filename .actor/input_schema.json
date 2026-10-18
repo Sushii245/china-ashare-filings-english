@@ -1,0 +1,98 @@
+{
+  "title": "China A-Share Filings to English",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "stockCodes": {
+      "title": "Stock codes",
+      "type": "array",
+      "description": "6-digit A-share codes (Shanghai and Shenzhen both supported), e.g. 000001, 600519. Leave empty to search the whole market.",
+      "editor": "stringList",
+      "prefill": ["000001"],
+      "uniqueItems": true
+    },
+    "startDate": {
+      "title": "Start date",
+      "type": "string",
+      "description": "Earliest publication date, YYYY-MM-DD.",
+      "editor": "datepicker",
+      "prefill": "2025-01-01"
+    },
+    "endDate": {
+      "title": "End date",
+      "type": "string",
+      "description": "Latest publication date, YYYY-MM-DD.",
+      "editor": "datepicker",
+      "prefill": "2025-12-31"
+    },
+    "category": {
+      "title": "Filing category",
+      "type": "string",
+      "description": "Restrict to one CNINFO disclosure category.",
+      "editor": "select",
+      "default": "",
+      "enum": ["", "dividend", "earnings_forecast", "annual_report", "semiannual_report", "q1_report", "q3_report", "equity_change", "daily_operations", "board_resolution", "shareholder_meeting", "share_incentive", "ipo", "placement", "other_financing", "governance", "intermediary_report", "corrections", "delisting_risk", "supervisor_resolution"],
+      "enumTitles": ["Any category", "Dividend / profit distribution", "Earnings pre-announcement", "Annual report", "Semi-annual report", "Q1 report", "Q3 report", "Equity change", "Daily operations (incl. related-party deals)", "Board resolution", "Shareholder meeting", "Share incentive", "IPO", "Placement", "Other financing", "Corporate governance", "Intermediary report", "Corrections", "Delisting risk", "Supervisor board resolution"]
+    },
+    "keyword": {
+      "title": "Title keyword (Chinese)",
+      "type": "string",
+      "description": "CNINFO matches this against filing titles only. Examples: 股份质押 (share pledge), 关联交易 (related-party transaction), 收购 (acquisition).",
+      "editor": "textfield"
+    },
+    "maxAnnouncements": {
+      "title": "Max announcements",
+      "type": "integer",
+      "description": "Hard cap on filings processed in this run. Each processed filing is a billable event.",
+      "editor": "number",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 500
+    },
+    "extractEnglish": {
+      "title": "Extract English data",
+      "type": "boolean",
+      "description": "On: download each PDF and produce an English summary plus structured, source-cited figures. Off: return filing metadata and PDF links only, at the much cheaper listing rate.",
+      "editor": "checkbox",
+      "default": true
+    },
+    "model": {
+      "title": "Model",
+      "type": "string",
+      "description": "Claude model used for extraction. Haiku is the cost-efficient default; Sonnet is more accurate on dense or unusual filings.",
+      "editor": "select",
+      "default": "claude-haiku-5-5",
+      "enum": ["claude-haiku-5-5", "claude-sonnet-5-5"],
+      "enumTitles": ["Claude Haiku 5.5 (default, fastest/cheapest)", "Claude Sonnet 5.5 (higher accuracy)"]
+    },
+    "maxChars": {
+      "title": "Max filing characters sent to the model",
+      "type": "integer",
+      "description": "Long filings such as annual reports are truncated to this budget, keeping the document head plus the highest-scoring sections.",
+      "editor": "number",
+      "default": 24000,
+      "minimum": 4000,
+      "maximum": 120000,
+      "sectionCaption": "Advanced"
+    },
+    "minRequestInterval": {
+      "title": "Minimum seconds between CNINFO requests",
+      "type": "integer",
+      "description": "Politeness delay towards the CNINFO public endpoints. Values below 1 second are not allowed.",
+      "editor": "number",
+      "default": 2,
+      "minimum": 1,
+      "maximum": 30,
+      "sectionCaption": "Advanced"
+    },
+    "anthropicApiKey": {
+      "title": "Your own Anthropic API key (optional)",
+      "type": "string",
+      "description": "Optional. Leave empty to use the included extraction service. Supply your own key if your organisation requires filings to be processed under its own Anthropic account.",
+      "editor": "textfield",
+      "isSecret": true,
+      "sectionCaption": "Advanced"
+    }
+  },
+  "required": ["startDate", "endDate"]
+}

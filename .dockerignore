@@ -1,0 +1,21 @@
+# Secrets and local state
+.env
+.git
+.cache
+data
+storage
+
+# Local artefacts not needed at runtime
+samples
+docs
+*.pdf
+REPORT.md
+OUTREACH.md
+STORE_README.md
+run_samples.py
+
+# Python
+__pycache__
+*.pyc
+.venv
+venv

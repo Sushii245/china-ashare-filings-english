@@ -1,0 +1,107 @@
+{
+  "announcement": {
+    "stock_code": "002932",
+    "stock_name": "明德生物",
+    "org_id": "gfbj0430591",
+    "announcement_id": "1224910283",
+    "title_cn": "关于筹划重大资产重组暨签署《股权收购意向协议》的提示性公告",
+    "publish_date": "2025-12-31",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-12-31/1224910283.PDF",
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=002932&announcementId=1224910283&orgId=gfbj0430591&announcementTime=2025-12-31",
+    "adjunct_size_kb": 195,
+    "adjunct_type": "PDF",
+    "announcement_time_ms": 1767110400000,
+    "raw_type_codes": "01010503||010112||011701||012399"
+  },
+  "pdf": {
+    "path": "data/pdfs/002932_2025-12-31_1224910283.pdf",
+    "page_count": 7,
+    "char_count": 5767,
+    "chars_per_page": 823.9,
+    "is_scanned": false,
+    "status": "ok",
+    "table_count": 4,
+    "prompt_chars": 5880,
+    "truncated": false
+  },
+  "status": "ok",
+  "extraction": {
+    "stock_code": "002932",
+    "company_name_cn": "明德生物",
+    "company_name_en": null,
+    "announcement_type": "acquisition",
+    "title_en": "Announcement on Planning a Major Asset Restructuring and Signing an Equity Acquisition Intent Agreement (Preliminary)",
+    "publish_date": "2025-12-31",
+    "summary_en": "Wuhan Mingde Biotechnology (002932) signed an equity acquisition intent agreement on 29 December 2025 with Lanfan Medical (蓝帆医疗), a Shenzhen-listed company, to acquire 100% of Wuhan Bikaier Rescue Supplies Co., Ltd. for cash. The deal is preliminarily expected to constitute a major asset restructuring under CSRC rules, is not a related-party transaction, and will not change the controlling shareholder or actual controller. The agreement is a non-binding framework; pricing will be based on a future third-party valuation, and the company must complete due diligence and approvals before a formal agreement is signed. Lanfan Medical is bound by an exclusivity commitment through 28 February 2026, and the filing emphasizes substantial uncertainty over whether the transaction will be completed.",
+    "key_figures": [
+      {
+        "label": "target equity stake to be acquired",
+        "value": 100.0,
+        "unit": "%",
+        "currency": null,
+        "source_text_cn": "双方就公司以现金方式收购武汉必凯尔救助用品有限公司（以下简称“标的公司”）100%股权的交易达成框架性意向",
+        "value_base": 100.0,
+        "unit_base": "%",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "target registered capital",
+        "value": 1845.0409,
+        "unit": "万元",
+        "currency": null,
+        "source_text_cn": "注册资本 | 1,845.0409 万元",
+        "value_base": 18450409.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "target registered capital (as stated in basic info)",
+        "value": 1845.0409,
+        "unit": "万元",
+        "currency": "CNY",
+        "source_text_cn": "注册资本 | 1,845.0409 万元",
+        "value_base": 18450409.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "counterparty registered capital",
+        "value": 100712.9138,
+        "unit": "万元",
+        "currency": null,
+        "source_text_cn": "注册资本 | 100,712.9138 万元",
+        "value_base": 1007129138.0,
+        "unit_base": "元",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      }
+    ],
+    "risk_flags": [
+      "Intent agreement is non-binding; final terms subject to definitive agreement",
+      "Significant uncertainty; transaction may not be completed or implemented due to due diligence, negotiation, or approval outcomes",
+      "Integration and operating risks regarding target company post-acquisition",
+      "Possible termination under binding clauses if due diligence fails or approvals are not obtained"
+    ],
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=002932&announcementId=1224910283&orgId=gfbj0430591&announcementTime=2025-12-31",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-12-31/1224910283.PDF"
+  },
+  "usage": {
+    "model": "claude-haiku-5-5",
+    "input_tokens": 8954,
+    "output_tokens": 814,
+    "cost_usd": 0.001302,
+    "latency_s": 6.36,
+    "stop_reason": "end_turn"
+  }
+}

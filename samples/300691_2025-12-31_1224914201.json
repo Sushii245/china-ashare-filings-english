@@ -1,0 +1,128 @@
+{
+  "announcement": {
+    "stock_code": "300691",
+    "stock_name": "联合光电",
+    "org_id": "9900032804",
+    "announcement_id": "1224914201",
+    "title_cn": "关于公司控股股东、实际控制人部分股份质押的公告",
+    "publish_date": "2025-12-31",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-12-31/1224914201.PDF",
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=300691&announcementId=1224914201&orgId=9900032804&announcementTime=2025-12-31",
+    "adjunct_size_kb": 86,
+    "adjunct_type": "PDF",
+    "announcement_time_ms": 1767175451000,
+    "raw_type_codes": "01010503||010112||010115||012307"
+  },
+  "pdf": {
+    "path": "data/pdfs/300691_2025-12-31_1224914201.pdf",
+    "page_count": 2,
+    "char_count": 1708,
+    "chars_per_page": 854.0,
+    "is_scanned": false,
+    "status": "ok",
+    "table_count": 2,
+    "prompt_chars": 1753,
+    "truncated": false
+  },
+  "status": "ok",
+  "extraction": {
+    "stock_code": "300691",
+    "company_name_cn": "联合光电",
+    "company_name_en": null,
+    "announcement_type": "share_pledge",
+    "title_en": "Announcement on Partial Share Pledge by the Controlling Shareholder and Actual Controller of the Company",
+    "publish_date": "2025-12-31",
+    "summary_en": "Lianhe Photonics (300691) disclosed on 2025-12-31 that controlling shareholder and actual controller Gong Junqiang pledged 500,000 shares, or 1.05% of his holdings and 0.19% of total share capital, with a pledge period from 2025-12-30 to 2035-03-25 to Industrial Bank Zhongshan Branch for working capital. After this pledge, Gong Junqiang's cumulative pledged shares total 25,690,000, equal to 53.80% of his 47,747,349 shares and 9.55% of total share capital. Combined with co-acting shareholder Qiu Shengping's 3,500,000 pledged shares, the controlling group's cumulative pledged shares total 29,190,000, or 45.40% of the group's holdings and 10.85% of total share capital. The company states that the pledges are within controllable risk, with no mention of margin call or forced-transfer risk in the filing beyond that statement.",
+    "key_figures": [
+      {
+        "label": "shares pledged in this transaction by controlling shareholder Gong Junqiang",
+        "value": 500000.0,
+        "unit": "股",
+        "currency": null,
+        "source_text_cn": "龚俊强 | 是 | 500,000 | 1.05% | 0.19% | 否 | 否 | 2025.12.30 | 2035.3.25 | 兴业银行股份有 限公司中山分行 | 资金 周转",
+        "value_base": 500000.0,
+        "unit_base": "股",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "pledged shares as % of Gong Junqiang's holdings (this transaction)",
+        "value": 1.05,
+        "unit": "%",
+        "currency": null,
+        "source_text_cn": "龚俊强 | 是 | 500,000 | 1.05% | 0.19% | 否 | 否 | 2025.12.30 | 2035.3.25 | 兴业银行股份有 限公司中山分行 | 资金 周转",
+        "value_base": 1.05,
+        "unit_base": "%",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "pledged shares as % of total share capital (this transaction)",
+        "value": 0.19,
+        "unit": "%",
+        "currency": null,
+        "source_text_cn": "龚俊强 | 是 | 500,000 | 1.05% | 0.19% | 否 | 否 | 2025.12.30 | 2035.3.25 | 兴业银行股份有 限公司中山分行 | 资金 周转",
+        "value_base": 0.19,
+        "unit_base": "%",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Gong Junqiang cumulative pledged shares after this transaction",
+        "value": 25690000.0,
+        "unit": "股",
+        "currency": null,
+        "source_text_cn": "龚俊强 | 47,747,349 | 17.75% | 25,190,000 | 25,690,000 | 53.80% | 9.55% | 0 | 0.00% | 0 | 0.00%",
+        "value_base": 25690000.0,
+        "unit_base": "股",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Gong Junqiang pledged share of holdings after this transaction",
+        "value": 53.8,
+        "unit": "%",
+        "currency": null,
+        "source_text_cn": "龚俊强 | 47,747,349 | 17.75% | 25,190,000 | 25,690,000 | 53.80% | 9.55% | 0 | 0.00% | 0 | 0.00%",
+        "value_base": 53.8,
+        "unit_base": "%",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      },
+      {
+        "label": "Gong Junqiang total shareholding",
+        "value": 47747349.0,
+        "unit": "股",
+        "currency": null,
+        "source_text_cn": "龚俊强 | 47,747,349 | 17.75% | 25,190,000 | 25,690,000 | 53.80% | 9.55% | 0 | 0.00% | 0 | 0.00%",
+        "value_base": 47747349.0,
+        "unit_base": "股",
+        "source_text_recovered": false,
+        "quote_in_document": true,
+        "value_in_quote": true,
+        "source_text_verified": true
+      }
+    ],
+    "risk_flags": [],
+    "source_url": "http://www.cninfo.com.cn/new/disclosure/detail?stockCode=300691&announcementId=1224914201&orgId=9900032804&announcementTime=2025-12-31",
+    "pdf_url": "http://static.cninfo.com.cn/finalpage/2025-12-31/1224914201.PDF"
+  },
+  "usage": {
+    "model": "claude-haiku-5-5",
+    "input_tokens": 4517,
+    "output_tokens": 2068,
+    "cost_usd": 0.001486,
+    "latency_s": 12.07,
+    "stop_reason": "end_turn"
+  }
+}

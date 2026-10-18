@@ -1,0 +1,24 @@
+# Secrets - never commit
+.env
+
+# Runtime caches and downloaded filings
+data/
+.cache/
+storage/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- Kept local on purpose: internal business material ---
+# Cost structure, margins and pricing decisions
+REPORT.md
+# Customer targeting and outreach copy
+OUTREACH.md
+# Personal account / billing / KYC setup steps
+LAUNCH_CHECKLIST.md
+# Capability brief (contains cost and margin tables) and its generator
+docs/
+*.pdf
