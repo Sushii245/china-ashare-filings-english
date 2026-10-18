@@ -1,0 +1,78 @@
+{
+  "title": "Taobao & Tmall Products",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "itemIds": {
+      "title": "Item IDs",
+      "type": "array",
+      "description": "Taobao / Tmall numeric item ids, or 1688 offer ids. Found in the listing URL: item.taobao.com/item.htm?id=600530677383.",
+      "editor": "stringList",
+      "prefill": ["600530677383"],
+      "uniqueItems": true
+    },
+    "itemUrls": {
+      "title": "Item URLs",
+      "type": "array",
+      "description": "Listing URLs instead of ids. Taobao, Tmall and 1688 links are all accepted; the id is read out of the URL.",
+      "editor": "requestListSources",
+      "default": []
+    },
+    "keyword": {
+      "title": "Search keyword",
+      "type": "string",
+      "description": "Search the catalogue instead of naming ids, e.g. 蓝牙耳机 or bluetooth earbuds. Results are capped by Max products.",
+      "editor": "textfield"
+    },
+    "platform": {
+      "title": "Platform",
+      "type": "string",
+      "description": "Which catalogue to read. Affects the URL built for each record and the fields that apply (wholesale ladders and minimum order quantities are a 1688 concept).",
+      "editor": "select",
+      "default": "taobao",
+      "enum": ["taobao", "tmall", "1688"],
+      "enumTitles": ["Taobao", "Tmall", "1688 (wholesale)"]
+    },
+    "maxProducts": {
+      "title": "Max products",
+      "type": "integer",
+      "description": "Hard cap on products returned in this run. Each product returned with data is one billable event.",
+      "editor": "number",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "includeSkus": {
+      "title": "Include the SKU matrix",
+      "type": "boolean",
+      "description": "On: return every purchasable variant with its own options, price and stock. Off: keep records small and return the listing level only.",
+      "editor": "checkbox",
+      "default": true
+    },
+    "minRequestInterval": {
+      "title": "Minimum seconds between requests",
+      "type": "integer",
+      "description": "Politeness delay towards the data source. Can be raised, not removed.",
+      "editor": "number",
+      "default": 1,
+      "minimum": 1,
+      "maximum": 30,
+      "sectionCaption": "Advanced"
+    },
+    "sourceBaseUrl": {
+      "title": "Product data provider base URL",
+      "type": "string",
+      "description": "Leave empty to use the included data source. Set this only if your organisation requires listings to be fetched through its own provider contract.",
+      "editor": "textfield",
+      "sectionCaption": "Advanced"
+    },
+    "sourceApiKey": {
+      "title": "Product data provider key",
+      "type": "string",
+      "description": "The key for the provider above. Ignored when the base URL is empty.",
+      "editor": "textfield",
+      "isSecret": true,
+      "sectionCaption": "Advanced"
+    }
+  }
+}

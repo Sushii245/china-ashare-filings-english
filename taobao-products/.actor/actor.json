@@ -1,0 +1,21 @@
+{
+  "actorSpecification": 1,
+  "name": "taobao-tmall-products-normalised",
+  "title": "Taobao & Tmall Products \u2014 Normalised English Fields",
+  "description": "Taobao, Tmall and 1688 listings as typed English records: price spans, wholesale ladders, sales figures with their window and unit, shipping terms and seller scores \u2014 each keeping the Chinese text it came from.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "dockerfile": "../Dockerfile",
+  "changelog": "../CHANGELOG.md",
+  "input": "./input_schema.json",
+  "output": "./output_schema.json",
+  "storages": {
+    "dataset": "./dataset_schema.json"
+  },
+  "defaultMemoryMbytes": 512,
+  "maxMemoryMbytes": 2048,
+  "environmentVariables": {
+    "SOURCE_BASE_URL": "@taobao-source-base-url",
+    "SOURCE_API_KEY": "@taobao-source-api-key"
+  }
+}

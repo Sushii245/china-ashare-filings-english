@@ -1,0 +1,122 @@
+[
+  {
+    "itemId": "600530677383",
+    "platform": "taobao",
+    "url": "https://item.taobao.com/item.htm?id=600530677383",
+    "status": "ok",
+    "statusDetail": null,
+    "titleCn": "无线蓝牙耳机 入耳式降噪 长续航 适用苹果安卓",
+    "titleEn": null,
+    "price": {
+      "value": 128.0,
+      "valueMax": 298.0,
+      "currency": "CNY",
+      "sourceTextCn": "128.00-298.00"
+    },
+    "originalPrice": {
+      "value": 358.0,
+      "valueMax": null,
+      "currency": "CNY",
+      "sourceTextCn": "￥358.00"
+    },
+    "priceTiers": [],
+    "minOrderQuantity": {
+      "value": 1,
+      "unitCn": "件",
+      "sourceTextCn": "1件"
+    },
+    "sales": {
+      "count": 1000,
+      "isApproximate": true,
+      "window": "monthly",
+      "unit": null,
+      "sourceTextCn": "月销1000+"
+    },
+    "stock": {
+      "value": 4532,
+      "isApproximate": true,
+      "sourceTextCn": "4532"
+    },
+    "shipping": {
+      "included": true,
+      "fee": {
+        "value": 0.0,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": null
+      },
+      "cashOnDelivery": false,
+      "shipsFromCn": "广东 深圳",
+      "sourceTextCn": "包邮"
+    },
+    "isPresale": false,
+    "presaleShipsWithinDays": null,
+    "shopNameCn": "数码旗舰店",
+    "shopId": "2200731234567",
+    "shopScores": [
+      {
+        "aspect": "description_match",
+        "aspectCn": "宝贝描述",
+        "score": 4.8,
+        "vsPeersPct": 20.15,
+        "sourceTextCn": "宝贝描述 4.8"
+      },
+      {
+        "aspect": "service",
+        "aspectCn": "卖家服务",
+        "score": 4.7,
+        "vsPeersPct": -3.2,
+        "sourceTextCn": "卖家服务 4.7"
+      },
+      {
+        "aspect": "logistics",
+        "aspectCn": "物流服务",
+        "score": 4.9,
+        "vsPeersPct": 0.0,
+        "sourceTextCn": "物流服务 4.9"
+      }
+    ],
+    "skus": [
+      {
+        "skuId": "5001",
+        "optionsCn": {
+          "颜色分类": "黑色",
+          "版本": "标准版"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 128.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": "128.00"
+        },
+        "stock": 2100
+      },
+      {
+        "skuId": "5002",
+        "optionsCn": {
+          "颜色分类": "白色",
+          "版本": "降噪版"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 298.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": "298.00"
+        },
+        "stock": 2432
+      }
+    ],
+    "images": [
+      "https://img.alicdn.com/imgextra/i1/abc/O1CN01.jpg",
+      "https://img.alicdn.com/imgextra/i2/abc/O1CN02.jpg"
+    ],
+    "attributesCn": {
+      "颜色分类": "黑色",
+      "版本": "标准版",
+      "品牌": "Soundcore"
+    },
+    "fetchedAt": "2026-10-18T15:30:30+00:00"
+  }
+]

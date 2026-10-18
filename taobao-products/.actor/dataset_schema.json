@@ -1,0 +1,36 @@
+{
+  "actorSpecification": 1,
+  "views": {
+    "overview": {
+      "title": "Products",
+      "transformation": {
+        "fields": [
+          "itemId", "status", "titleCn", "price", "sales", "shipping",
+          "shopNameCn", "minOrderQuantity", "stock", "url"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "itemId": { "label": "Item ID" },
+          "status": { "label": "Status" },
+          "titleCn": { "label": "Title (CN)" },
+          "price": { "label": "Price" },
+          "sales": { "label": "Sales" },
+          "shipping": { "label": "Shipping" },
+          "shopNameCn": { "label": "Shop" },
+          "minOrderQuantity": { "label": "MOQ" },
+          "stock": { "label": "Stock" },
+          "url": { "label": "Listing" }
+        }
+      }
+    },
+    "wholesale": {
+      "title": "Wholesale ladder",
+      "transformation": {
+        "fields": ["itemId", "titleCn", "minOrderQuantity", "priceTiers", "shopNameCn"]
+      },
+      "display": { "component": "table" }
+    }
+  }
+}

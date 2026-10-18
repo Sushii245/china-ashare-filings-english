@@ -1,0 +1,25 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "Normalised products",
+  "description": "One record per listing: typed prices and sales figures, wholesale ladder, shipping terms, seller scores and the SKU matrix, each normalised field carrying its Chinese source text.",
+  "properties": {
+    "products": {
+      "type": "string",
+      "title": "Products (JSON)",
+      "description": "All products as JSON.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items?clean=true"
+    },
+    "productsCsv": {
+      "type": "string",
+      "title": "Products (CSV)",
+      "description": "The same records as CSV, for spreadsheets.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items?clean=true&format=csv"
+    },
+    "datasetView": {
+      "type": "string",
+      "title": "Browse in Console",
+      "description": "Open the dataset in Apify Console.",
+      "template": "{{links.consoleDatasetUrl}}"
+    }
+  }
+}
