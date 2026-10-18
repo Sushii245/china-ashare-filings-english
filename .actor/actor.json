@@ -6,6 +6,8 @@
   "version": "0.1",
   "buildTag": "latest",
   "dockerfile": "../Dockerfile",
+  "readme": "./STORE_README.md",
+  "changelog": "./CHANGELOG.md",
   "input": "./input_schema.json",
   "storages": {
     "dataset": "./dataset_schema.json"
@@ -14,8 +16,6 @@
     "ANTHROPIC_API_KEY": "@anthropic-api-key",
     "ANTHROPIC_BASE_URL": "https://aihubmix.com"
   },
-  "defaultRunOptions": {
-    "memoryMbytes": 1024,
-    "timeoutSecs": 3600
-  }
+  "defaultMemoryMbytes": 1024,
+  "maxMemoryMbytes": 4096
 }
