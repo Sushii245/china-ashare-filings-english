@@ -60,24 +60,38 @@ This Actor goes the rest of the way: it downloads the filing, reads it, and retu
 
 | | Typical CNINFO scraper | This Actor |
 |---|---|---|
-| Title | Chinese | Chinese **and** English |
+| Title | Chinese | Chinese and English |
 | Content | A PDF link | English summary written for professional investors |
-| Numbers | None | Typed figures with unit, currency and ISO-normalised value |
-| 万元 / 亿元 | Your problem | Converted to base units **in code**, both forms kept |
-| Verification | None | Every figure carries its **source sentence in Chinese**, checked against the PDF |
-| Filing type | Chinese category codes | Normalised English taxonomy |
+| Numbers | None | Typed figures with unit, currency and normalised value |
+| 万元 / 亿元 | Your problem | Converted in code, both forms kept |
+| Verification | None | Each figure's source sentence, checked against the PDF |
+| Filing type | Chinese category codes | Seven normalised English types |
 
-### Every number is auditable
+## About the citations
 
-Language models can misread documents. Rather than ask you to trust the output, this Actor ships the evidence and checks it:
+Models misread documents. So every figure comes back with `sourceTextCn`, the
+Chinese sentence it was taken from, and the code runs two checks on that
+sentence: does it appear verbatim in the PDF, and does the number appear inside
+it? Both have to pass before `sourceTextVerified` is true.
 
-- Each figure carries `sourceTextCn` — the exact Chinese sentence stating it.
-- The code independently verifies that this sentence **occurs verbatim in the PDF**, and that **the number actually appears inside that sentence**.
-- `sourceTextVerified` is the result. If a citation cannot be verified, the field says so instead of hiding it.
+Two things I found while building this, which tell you what the checks are
+actually for:
 
-On the published benchmark set (6 filings across 5 types, 35 figures), **35/35 figures passed both checks**.
+The first version only checked that the sentence existed somewhere in the
+document. On a Vanke shareholder-loan filing it happily reported RMB 1.666
+billion and cited a sentence that did not contain that number anywhere — the
+model had cut the sentence short before reaching the figure. The check passed.
+That is why the second check exists, and why a truncated citation now gets
+repaired in code: the extractor finds where the number actually sits in the PDF
+and pulls the real clause around it.
 
----
+The second was dumber and took longer to find. Four citations kept failing as
+"not in document" when they plainly were. The model was writing `3．` with a
+fullwidth period where the PDF had `3.`. Same sentence, different byte. The
+comparison is NFKC-normalised now.
+
+Current state on the benchmark set: 35 figures across 6 filings, 35 pass both
+checks.
 
 ## Typical uses
 
