@@ -137,6 +137,15 @@ This runs the real Actor against the real payloads with no network. Check the
 dataset records, then check that the refused and bogus ids came back with a
 `status` and **were not billed**.
 
+## Before publishing — the default input
+
+`input_schema.json` prefills `itemIds` with `600530677383`, which I made up
+while writing the fixtures. Apify runs a published Actor every day against its
+default input and flags it as under maintenance after repeated empty or failed
+runs, so **replace that prefill with an id you verified in Phase 1** before the
+Actor goes public. A cheaper default is `detailLevel: "listing"` with a keyword
+prefill: one call, and it cannot go stale the way a single id can.
+
 ## Only then
 
 Set `SOURCE_BASE_URL` and `SOURCE_API_KEY` as Actor secrets, push the build,
