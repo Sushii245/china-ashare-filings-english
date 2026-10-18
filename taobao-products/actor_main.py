@@ -54,6 +54,16 @@ DEFAULT_CONCURRENCY = 5
 _ID_IN_QUERY = re.compile(r"[?&]id=(\d+)")
 _ID_IN_OFFER = re.compile(r"/offer/(\d+)")
 
+#: A listing id on its own. Taobao, Tmall and 1688 ids are long numerics.
+_BARE_ID = re.compile(r"\d{6,}")
+#: Last resort: any long digit run inside whatever was pasted.
+_ANY_LONG_ID = re.compile(r"(\d{6,})")
+
+#: Platforms this Actor builds URLs for. Anything else is refused rather than
+#: quietly relabelled, because a record carrying a taobao URL for a listing
+#: that is not on Taobao is worse than a failed run.
+SUPPORTED_PLATFORMS = ("taobao", "tmall", "1688")
+
 
 def item_id_from_url(url: str) -> str | None:
     """Read the listing id out of a Taobao, Tmall or 1688 URL.
@@ -65,6 +75,35 @@ def item_id_from_url(url: str) -> str | None:
         return None
     match = _ID_IN_QUERY.search(url) or _ID_IN_OFFER.search(url)
     return match.group(1) if match else None
+
+
+def _validate_platform(platform: str) -> str:
+    """Return ``platform`` if this Actor knows it, else raise."""
+    if platform not in SUPPORTED_PLATFORMS:
+        raise ValueError(
+            f"unsupported platform {platform!r}; expected one of "
+            + ", ".join(SUPPORTED_PLATFORMS)
+        )
+    return platform
+
+
+def clean_item_id(raw: Any) -> str | None:
+    """Get a listing id out of whatever was typed, or give up before paying.
+
+    Every id handed to the provider is a billed call, so a pasted URL or a
+    stray newline must not become a request that is certain to miss. Returns
+    ``None`` when there is no id to be found.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if _BARE_ID.fullmatch(text):
+        return text
+    from_url = item_id_from_url(text)
+    if from_url:
+        return from_url
+    found = _ANY_LONG_ID.search(text)
+    return found.group(1) if found else None
 
 
 def _urls_from_input(raw: Any) -> list[str]:
@@ -129,7 +168,17 @@ def _resolve_ids(
         ids.append(candidate)
 
     for raw in actor_input.get("itemIds") or []:
-        add(str(raw).strip() or None)
+        cleaned = clean_item_id(raw)
+        if cleaned is None:
+            Actor.log.warning(
+                "No listing id found in %r; skipping it rather than spending a "
+                "call on it.",
+                raw,
+            )
+            continue
+        if cleaned != str(raw).strip():
+            Actor.log.info("Read %s out of %r.", cleaned, raw)
+        add(cleaned)
 
     for url in _urls_from_input(actor_input.get("itemUrls")):
         found = item_id_from_url(url)
@@ -211,7 +260,13 @@ async def main() -> None:
     async with Actor:
         actor_input = await Actor.get_input() or {}
 
-        platform = (actor_input.get("platform") or "taobao").strip()
+        try:
+            platform = _validate_platform(
+                (actor_input.get("platform") or "taobao").strip()
+            )
+        except ValueError as exc:
+            await Actor.fail(status_message=str(exc))
+            return
         limit = int(actor_input.get("maxProducts") or 10)
         include_skus = bool(actor_input.get("includeSkus", True))
         raw_quantity = actor_input.get("quantity")

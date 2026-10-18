@@ -137,7 +137,7 @@ as a span across variants has no single unit price to resolve to, so
 
 | Field | Type | Description |
 |---|---|---|
-| `itemIds` | array | Taobao / Tmall item ids or 1688 offer ids. |
+| `itemIds` | array | Taobao / Tmall item ids or 1688 offer ids. Pasting a full listing URL here works too — the id is read out of it rather than sent upstream as-is. |
 | `itemUrls` | array | Listing URLs instead; the id is read out of the URL. |
 | `keyword` | string | Search the catalogue instead of naming ids. |
 | `platform` | enum | `taobao`, `tmall` or `1688`. |
@@ -204,6 +204,13 @@ Stated plainly, because they affect whether this fits your workflow:
   print a range. A span with source text was printed as a range.
 - **Shipping is read from the listing record**, not fetched separately. Where
   the listing does not carry it, `shipping` is `null` rather than guessed.
+- **An entry with no id in it is skipped, not requested.** You get a warning
+  naming it. Sending it upstream would be a billed call for a certain miss.
+- **An overlapping wholesale ladder quotes the dearer matching rung.** Some
+  listings publish rungs that overlap, and then nothing says which the seller
+  means; understating what an order costs is the harmful way to be wrong.
+  A quantity matching no rung at all falls back to the listing price with
+  `tierSourceTextCn` null.
 - **Listings the platform refuses are reported, not retried into oblivion.**
   A `risk_control_blocked` status means the platform declined that id for this
   request. It is not billed.

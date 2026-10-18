@@ -71,15 +71,22 @@ def parse_cn_number(value: str | None) -> float | None:
     # Thousands separators only count between digits, so "1,280" folds but a
     # trailing comma in prose does not swallow the next number.
     text = re.sub(r"(?<=\d),(?=\d{3}\b)", "", text)
-    match = re.search(rf"({_NUM})\s*([{''.join(m[0] for m in _MULTIPLIERS)}]?)", text)
+    match = re.search(
+        rf"(-?)({_NUM})\s*([{''.join(m[0] for m in _MULTIPLIERS)}]?)", text
+    )
     if not match:
         return None
-    suffix = match.group(2)
+    if match.group(1):
+        # Every figure read here — price, sales, stock, quantity — is
+        # non-negative. A minus means the field is not what we think it is, and
+        # dropping the sign to return the magnitude is worse than refusing.
+        return None
+    suffix = match.group(3)
     # Decimal, not float: 2.3 * 100_000_000 is 229999999.99999997 in binary
     # floating point, and a price or a sales count that is off by a hundredth
     # of a unit reads as a parser bug to the buyer.
     try:
-        number = Decimal(match.group(1))
+        number = Decimal(match.group(2))
     except InvalidOperation:
         return None
     for mark, factor in _MULTIPLIERS:

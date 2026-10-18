@@ -500,3 +500,62 @@ def test_a_listing_with_no_variants_reports_no_sku_count(tmp_path):
         '{"item": {"num_iid": "1", "title": "商品", "price": "9.90"}}', encoding="utf-8"
     )
     assert normalize(FixtureSource(tmp_path).fetch_product("1")).to_item()["skuCount"] is None
+
+
+# ------------------------------------------------- malformed wholesale data
+
+def _ladder(tmp_path, rows: str, **extra):
+    import json as _json
+    item = {"num_iid": "1", "title": "批发件", "price": "12.00", "price_ranges": _json.loads(rows)}
+    item.update(extra)
+    (tmp_path / "1.json").write_text(
+        _json.dumps({"platform": "1688", "payload": {"item": item}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    return FixtureSource(tmp_path)
+
+
+def test_overlapping_tiers_quote_the_dearer_one(tmp_path):
+    # A ladder should not overlap, but when it does there is no way to know
+    # which rung the seller means. Quoting the cheaper one understates the
+    # order, and the buyer budgets off this number, so the dearer one wins.
+    source = _ladder(tmp_path, '[{"range":"100-999件","price":"10.50"},'
+                               ' {"range":"50-500件","price":"8.00"}]')
+    quote = normalize(source.fetch_product("1"), quantity=200).to_item()["quote"]
+    assert quote["unitPrice"]["value"] == 10.5
+    assert quote["tierSourceTextCn"] == "100-999件 10.50"
+
+
+def test_a_quantity_in_a_gap_falls_back_to_the_listing_price(tmp_path):
+    # 300 matches no rung here. The headline price is the honest fallback, and
+    # a null tierSourceTextCn tells the buyer it did not come from a rung.
+    source = _ladder(tmp_path, '[{"range":"1-99件","price":"12.00"},'
+                               ' {"range":"500-999件","price":"9.00"}]')
+    quote = normalize(source.fetch_product("1"), quantity=300).to_item()["quote"]
+    assert quote["unitPrice"]["value"] == 12.0
+    assert quote["tierSourceTextCn"] is None
+
+
+def test_the_listing_price_counts_towards_the_span(tmp_path):
+    # One priced variant at 19.9 against a listing price of 9.9 is a span,
+    # even though there is only a single SKU price to compare.
+    import json as _json
+    (tmp_path / "1.json").write_text(_json.dumps({"item": {
+        "num_iid": "1", "title": "商品", "price": "9.90",
+        "skus": {"sku": [{"sku_id": "a", "properties_name": "1:2:颜色:红", "price": ""},
+                         {"sku_id": "b", "properties_name": "1:3:颜色:蓝", "price": "19.90"}]},
+    }}, ensure_ascii=False), encoding="utf-8")
+    record = normalize(FixtureSource(tmp_path).fetch_product("1")).to_item()
+    assert (record["price"]["value"], record["price"]["valueMax"]) == (9.9, 19.9)
+    assert record["price"]["sourceTextCn"] is None       # derived
+
+
+def test_a_single_priced_variant_matching_the_listing_is_not_a_span(tmp_path):
+    import json as _json
+    (tmp_path / "1.json").write_text(_json.dumps({"item": {
+        "num_iid": "1", "title": "商品", "price": "12.00",
+        "skus": {"sku": {"sku_id": "a", "properties_name": "1:2:颜色:红", "price": "12.00"}},
+    }}, ensure_ascii=False), encoding="utf-8")
+    record = normalize(FixtureSource(tmp_path).fetch_product("1")).to_item()
+    assert record["price"]["valueMax"] is None
+    assert record["price"]["sourceTextCn"] == "12.00"

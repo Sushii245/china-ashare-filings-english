@@ -317,9 +317,14 @@ def normalize(
     price = units.parse_price(_scalar(field("price_range")))
     if price is None:
         price = units.parse_price(_scalar(field("price")))
-        sku_prices = [s.price.value for s in skus if s.price]
-        if price and len(sku_prices) > 1 and min(sku_prices) != max(sku_prices):
-            price = Money(value=min(sku_prices), value_max=max(sku_prices))
+        # The listing price counts as a candidate alongside the variants. A
+        # listing at 9.90 with one variant priced 19.90 is a span, even though
+        # only one variant carries a price of its own.
+        candidates = [s.price.value for s in skus if s.price]
+        if price is not None:
+            candidates.append(price.value)
+        if price is not None and len(set(candidates)) > 1:
+            price = Money(value=min(candidates), value_max=max(candidates))
 
     stock_text = _first_str(field("stock"))
     stock_value = units.parse_cn_number(stock_text)
@@ -393,14 +398,20 @@ def _build_quote(product: Product, quantity: int) -> Quote:
         # price is still worth showing, so this is a flag, not a refusal.
         quote.meets_minimum_order = quantity >= moq.value
 
-    for tier in product.price_tiers:
-        if quantity < tier.min_qty:
-            continue
-        if tier.max_qty is not None and quantity > tier.max_qty:
-            continue
-        quote.unit_price = tier.unit_price
-        quote.tier_source_text_cn = tier.source_text_cn
-        break
+    # A ladder should not overlap, but some do, and then there is no way to
+    # know which rung the seller means. The buyer budgets off this number, so
+    # the dearest matching rung wins: understating an order is the harmful
+    # direction to be wrong in.
+    matching = [
+        tier
+        for tier in product.price_tiers
+        if quantity >= tier.min_qty
+        and (tier.max_qty is None or quantity <= tier.max_qty)
+    ]
+    if matching:
+        dearest = max(matching, key=lambda t: t.unit_price.value)
+        quote.unit_price = dearest.unit_price
+        quote.tier_source_text_cn = dearest.source_text_cn
 
     if quote.unit_price is None and product.price is not None:
         # A span across variants has no single unit price to quote.

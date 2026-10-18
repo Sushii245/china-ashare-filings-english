@@ -19,6 +19,18 @@ provider configured (see DESIGN.md for why there is no login-free path).
   resolved against the 阶梯价 ladder, the subtotal, which tier it landed on,
   and whether the quantity clears the seller's minimum. A span-priced listing
   reports a null unit price rather than silently using the low end.
+- A listing URL pasted into the ids field has its id read out of it, and an
+  entry with no id in it is skipped with a warning. Both used to be sent to
+  the provider verbatim, at one billed call each for a guaranteed miss.
+- An unsupported `platform` fails the run instead of being relabelled
+  `taobao`, which produced records carrying a Taobao URL for listings that
+  were not on Taobao.
+- An overlapping wholesale ladder quotes the dearest matching rung rather than
+  the first one found, so a quote never understates what an order costs.
+- The listing price counts as a candidate when deriving a price span, so a
+  listing at 9.90 with one variant at 19.90 reports the span.
+- A negative figure is refused rather than returned as its magnitude: `-5`
+  used to parse as `5.0`, because the digit scan dropped the sign.
 - Listings are fetched in parallel, 5 at a time by default, which takes
   throughput from about 60 a minute to about 280 against a 300 ms provider
   round-trip. Request spacing is enforced across all workers rather than per

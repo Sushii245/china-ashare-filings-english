@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import actor_main  # noqa: E402
+import normalize as normalize_mod  # noqa: E402
 import source as source_mod  # noqa: E402
 from source import FixtureSource  # noqa: E402
 
@@ -196,3 +197,58 @@ def test_a_single_listing_skips_the_pool():
         source, ["1"], quantity=None, workers=5, platform="taobao"
     )
     assert len(products) == 1 and products[0].status == "ok"
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [
+        ("600530677383", "600530677383"),
+        (" 600530677383 ", "600530677383"),
+        ("600530677383\n", "600530677383"),
+        # A pasted URL in the ids field used to be sent upstream verbatim,
+        # which is one billed call per paste for a guaranteed miss.
+        ("https://item.taobao.com/item.htm?id=600530677383", "600530677383"),
+        ("https://detail.1688.com/offer/612345678901.html", "612345678901"),
+        ("id=600530677383", "600530677383"),
+    ],
+)
+def test_ids_are_salvaged_rather_than_spent_on(given, expected):
+    source = PageIgnoringSource([])
+    assert actor_main._resolve_ids({"itemIds": [given]}, source, limit=5) == [expected]
+
+
+@pytest.mark.parametrize("junk", ["abc", "", "   ", "商品", "https://example.com/x"])
+def test_an_unusable_id_is_dropped_before_it_costs_a_call(junk):
+    source = PageIgnoringSource([])
+    assert actor_main._resolve_ids({"itemIds": [junk]}, source, limit=5) == []
+
+
+def test_an_unknown_platform_is_refused_rather_than_relabelled():
+    # Silently calling a JD id "taobao" hands the buyer a taobao URL for a
+    # listing that is not there.
+    with pytest.raises(ValueError) as caught:
+        actor_main._validate_platform("jd")
+    assert "jd" in str(caught.value)
+
+
+@pytest.mark.parametrize("ok", ["taobao", "tmall", "1688"])
+def test_the_supported_platforms_pass(ok):
+    assert actor_main._validate_platform(ok) == ok
+
+
+def test_every_dataset_view_field_exists_on_a_record():
+    # The dataset views name fields by string. Renaming one in models.py
+    # without touching the schema breaks the view silently in Console.
+    import json
+
+    from source import RawProduct
+
+    schema = json.loads((ROOT / ".actor" / "dataset_schema.json").read_text(encoding="utf-8"))
+    record = normalize_mod.normalize(
+        RawProduct(item_id="1", platform="taobao",
+                   payload={"item": {"num_iid": "1", "title": "商品", "price": "9.90"}}),
+        quantity=10,
+    ).to_item()
+    for view, body in schema["views"].items():
+        for field in body["transformation"]["fields"]:
+            assert field in record, f"view {view!r} names {field!r}, which no record has"

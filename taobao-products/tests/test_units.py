@@ -268,3 +268,20 @@ def test_the_floor_marker_duo_needs_to_follow_a_digit(text, approx):
 def test_a_dispatch_range_reports_the_upper_bound():
     # "付款后3-5天内发货" is a promise; the safe reading is the slower end.
     assert units.parse_presale_days("付款后3-5天内发货") == 5
+
+
+@pytest.mark.parametrize("text", ["-5", "¥-5", "-0.01", " -128.00"])
+def test_a_negative_number_is_rejected_not_flipped(text):
+    # The sign used to be dropped by the digit scan, so "-5" came back as 5.0.
+    # Every figure this parses — price, sales, stock, quantity — is
+    # non-negative, so a minus means the field is not what we think it is.
+    assert units.parse_cn_number(text) is None
+    assert units.parse_price(text) is None
+
+
+def test_a_range_is_still_read_when_it_contains_a_hyphen():
+    # Guarding against the minus must not break "128-298", where the hyphen is
+    # a separator rather than a sign.
+    money = units.parse_price("128.00-298.00")
+    assert money is not None and (money.value, money.value_max) == (128.0, 298.0)
+    assert units.parse_tier_range("1-99件") == (1, 99)
