@@ -4,9 +4,9 @@ Wraps the Stage 1 pipeline (``fetch`` -> ``parse`` -> ``extract``) in the Apify
 Actor lifecycle and charges pay-per-event.
 
 Chargeable events (prices are configured in the Actor's Monetization settings,
-not here):
+not here). The run itself is charged by the platform's built-in
+``apify-actor-start``, so this module does not charge a start event of its own:
 
-``actor-start``                   once per run
 ``announcement-listed``           a filing returned as metadata only
 ``announcement-processed``        a filing extracted into English
 ``announcement-processed-long``   same, for filings above ``LONG_FILING_PAGES``
@@ -31,7 +31,6 @@ import parse as parse_mod
 #: Filings at or above this page count bill at the long-filing rate.
 LONG_FILING_PAGES = 50
 
-EVENT_START = "actor-start"
 EVENT_LISTED = "announcement-listed"
 EVENT_PROCESSED = "announcement-processed"
 EVENT_PROCESSED_LONG = "announcement-processed-long"
@@ -167,8 +166,6 @@ async def main() -> None:
             "Pricing model: %s (pay-per-event: %s)",
             pricing.pricing_model or "none", is_ppe,
         )
-
-        await Actor.charge(EVENT_START)
 
         extractor: extract_mod.ClaudeExtractor | None = None
         if extract_english:
