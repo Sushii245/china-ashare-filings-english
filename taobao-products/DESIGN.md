@@ -131,6 +131,25 @@ product, which is below the pay-as-you-go call cost. Those listings only work
 on the committed monthly plan, which is why they compete on price: they are
 carrying a fixed cost that has to be amortised.
 
+## Throughput
+
+The A-share Actor spaces its requests a second apart because it reads CNINFO's
+public endpoints, where that is simple courtesy. This one calls a provider API
+billed per call: the constraint is the plan's rate limit, not a site owner's
+patience, and a second between requests caps the Actor at ~60 listings a
+minute when a competitor advertises 250+.
+
+Listings are fetched five at a time by default, with the request spacing held
+globally rather than per worker — N workers each honouring the interval
+independently would be N times the intended rate, which is how a rate limit
+gets tripped. Measured against a 300 ms round-trip: ~61/min serial at the old
+1 s spacing, ~284/min at the defaults, ~525/min at ten workers and 0.1 s.
+
+Chunking keeps the billing path intact: a chunk is fetched in parallel, then
+its records are pushed and charged in sequence, so the charge-limit check still
+sees one item at a time and stops without having paid for work it cannot
+deliver.
+
 ## Compliance boundary
 
 * Product and shop listing data only. No buyer identities, no reviewer names,

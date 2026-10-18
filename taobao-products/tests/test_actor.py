@@ -7,6 +7,7 @@ will charge for, so they are worth pinning down.
 from __future__ import annotations
 
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 import actor_main  # noqa: E402
+import source as source_mod  # noqa: E402
 from source import FixtureSource  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -135,3 +137,62 @@ def test_a_page_that_adds_nothing_new_stops_the_search():
     ids = actor_main._resolve_ids({"keyword": "x"}, source, limit=100)
     assert ids == ["1", "2", "3"]
     assert source.calls == 2, f"made {source.calls} search calls, expected 2"
+
+
+class CountingSource:
+    """Records the order it was asked in, and can be told to fail on an id."""
+
+    def __init__(self, fail: set[str] | None = None) -> None:
+        self.asked: list[str] = []
+        self.fail = fail or set()
+        self._lock = threading.Lock()
+
+    def fetch_product(self, item_id: str):
+        with self._lock:
+            self.asked.append(item_id)
+        if item_id in self.fail:
+            raise RuntimeError(f"boom on {item_id}")
+        return source_mod.RawProduct(
+            item_id=item_id,
+            platform="taobao",
+            payload={"item": {"num_iid": item_id, "title": f"商品{item_id}", "price": "9.90"}},
+        )
+
+    def search(self, keyword: str, *, page: int = 1):  # pragma: no cover
+        return []
+
+
+def test_a_chunk_comes_back_in_the_order_it_was_asked():
+    # The dataset should list the ids the buyer gave, in that order, even
+    # though the fetches themselves overlap.
+    ids = [str(i) for i in range(10)]
+    products = actor_main._fetch_chunk(
+        CountingSource(), ids, quantity=None, workers=5, platform="taobao"
+    )
+    assert [p.item_id for p in products] == ids
+
+
+def test_one_failing_listing_does_not_sink_the_chunk():
+    source = CountingSource(fail={"3"})
+    products = actor_main._fetch_chunk(
+        source, ["1", "2", "3", "4"], quantity=None, workers=4, platform="taobao"
+    )
+    by_id = {p.item_id: p for p in products}
+    assert by_id["3"].status == "upstream_error"
+    assert "boom on 3" in (by_id["3"].status_detail or "")
+    assert [by_id[i].status for i in ("1", "2", "4")] == ["ok", "ok", "ok"]
+
+
+def test_the_quantity_reaches_every_listing_in_a_chunk():
+    products = actor_main._fetch_chunk(
+        CountingSource(), ["1", "2"], quantity=7, workers=2, platform="taobao"
+    )
+    assert [p.quote.quantity for p in products] == [7, 7]
+
+
+def test_a_single_listing_skips_the_pool():
+    source = CountingSource()
+    products = actor_main._fetch_chunk(
+        source, ["1"], quantity=None, workers=5, platform="taobao"
+    )
+    assert len(products) == 1 and products[0].status == "ok"

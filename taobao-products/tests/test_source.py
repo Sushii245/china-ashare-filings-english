@@ -249,3 +249,62 @@ def test_optional_credentials_are_omitted_rather_than_sent_empty():
     assert "secret" not in params
     assert "cache" not in params
     assert "lang" not in params
+
+
+class ThreadSafeSession:
+    """Returns the same good body to any number of concurrent callers."""
+
+    def __init__(self) -> None:
+        import threading
+
+        self.times: list[float] = []
+        self._lock = threading.Lock()
+        self.headers: dict[str, str] = {}
+
+    def get(self, url, params=None, timeout=None):
+        import time
+
+        with self._lock:
+            self.times.append(time.monotonic())
+        return FakeResponse(body=OK_BODY)
+
+
+def test_the_interval_is_enforced_across_threads_not_per_thread():
+    # Five workers each honouring the interval on their own would be five
+    # times the intended request rate, which is how a provider rate limit gets
+    # tripped. The spacing has to be global.
+    from concurrent.futures import ThreadPoolExecutor
+
+    interval = 0.05
+    config = source_mod.SourceConfig(
+        base_url="https://provider.example",
+        api_key="k",
+        min_interval=interval,
+        max_retries=0,
+        backoff_base=0.0,
+    )
+    client = source_mod.UpstreamSource(config)
+    session = ThreadSafeSession()
+    client.session = session  # type: ignore[assignment]
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        list(pool.map(client.fetch_product, [str(i) for i in range(10)]))
+
+    assert len(session.times) == 10
+    gaps = [b - a for a, b in zip(sorted(session.times), sorted(session.times)[1:])]
+    # Allow a little slack for scheduling, but nothing like a 5x burst.
+    assert min(gaps) >= interval * 0.8, f"requests bunched up: {gaps}"
+
+
+def test_concurrent_fetches_all_succeed():
+    from concurrent.futures import ThreadPoolExecutor
+
+    config = source_mod.SourceConfig(
+        base_url="https://provider.example", api_key="k",
+        min_interval=0.0, max_retries=0, backoff_base=0.0,
+    )
+    client = source_mod.UpstreamSource(config)
+    client.session = ThreadSafeSession()  # type: ignore[assignment]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(client.fetch_product, [str(i) for i in range(24)]))
+    assert all(r.status == "ok" for r in results)

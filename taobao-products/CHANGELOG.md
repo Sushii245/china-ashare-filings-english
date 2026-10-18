@@ -19,6 +19,11 @@ provider configured (see DESIGN.md for why there is no login-free path).
   resolved against the 阶梯价 ladder, the subtotal, which tier it landed on,
   and whether the quantity clears the seller's minimum. A span-priced listing
   reports a null unit price rather than silently using the low end.
+- Listings are fetched in parallel, 5 at a time by default, which takes
+  throughput from about 60 a minute to about 280 against a 300 ms provider
+  round-trip. Request spacing is enforced across all workers rather than per
+  worker, so raising `concurrency` cannot multiply the request rate past the
+  provider's limit. Records are still written, and billed, in the order asked.
 - `discountPct` against the struck-through price, and `skuCount` recorded
   before the SKU array can be dropped, so turning `includeSkus` off still
   tells you the listing has variants.

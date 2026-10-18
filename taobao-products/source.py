@@ -24,6 +24,7 @@ import json
 import logging
 import random
 import re
+import threading
 import time
 from pathlib import Path
 from typing import Any, Iterable, Protocol
@@ -100,7 +101,10 @@ class SourceConfig:
     keyword_param: str = "q"
     page_param: str = "page"
     extra_params: dict[str, str] = dataclasses.field(default_factory=dict)
-    min_interval: float = 0.5
+    #: Minimum seconds between requests, enforced across every worker. This
+    #: is a paid provider API, not someone's public website — the floor exists
+    #: to stay inside a rate limit, not out of politeness to a site owner.
+    min_interval: float = 0.2
     max_retries: int = 3
     #: Seconds for the first retry; doubles per attempt. Zero in tests.
     backoff_base: float = 1.0
@@ -222,6 +226,10 @@ class UpstreamSource:
         self.config = config
         self.platform = platform
         self._last_request = 0.0
+        # Shared by every worker thread, so the spacing is global rather than
+        # per-thread: N workers at one request each per interval would be N
+        # times the intended rate.
+        self._throttle_lock = threading.Lock()
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -233,10 +241,17 @@ class UpstreamSource:
     # ------------------------------------------------------------------ plumbing
 
     def _throttle(self) -> None:
-        wait = self.config.min_interval - (time.monotonic() - self._last_request)
-        if wait > 0:
-            time.sleep(wait + random.uniform(0, 0.2))
-        self._last_request = time.monotonic()
+        """Space requests globally, holding the slot while sleeping.
+
+        The sleep happens inside the lock on purpose. Releasing it first lets
+        every waiting worker read the same ``_last_request`` and wake together,
+        which is the bug this is written to avoid.
+        """
+        with self._throttle_lock:
+            wait = self.config.min_interval - (time.monotonic() - self._last_request)
+            if wait > 0:
+                time.sleep(wait)
+            self._last_request = time.monotonic()
 
     def _params(self, **extra: Any) -> dict[str, Any]:
         params: dict[str, Any] = dict(self.config.extra_params)

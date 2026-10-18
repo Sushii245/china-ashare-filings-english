@@ -143,6 +143,7 @@ as a span across variants has no single unit price to resolve to, so
 | `platform` | enum | `taobao`, `tmall` or `1688`. |
 | `maxProducts` | integer | Hard cap. Each listing returned with data is one billable event. |
 | `quantity` | integer | Price every listing at this many pieces: unit price off the ladder, subtotal, which tier, and whether it clears the MOQ. |
+| `concurrency` | integer | Listings fetched in parallel, 1–10. Default 5. |
 | `includeSkus` | boolean | Off keeps records small and returns the listing level only. `skuCount` still reports how many variants there were. |
 
 ### Example input
@@ -158,6 +159,14 @@ as a span across variants has no single unit price to resolve to, so
 ```
 
 ---
+
+## Throughput
+
+About **280 listings a minute** at the defaults (5 in parallel, requests spaced
+0.2s apart), measured against a 300 ms provider round-trip. Raise `concurrency`
+to 10 and lower the interval if your provider plan allows it; lower both if it
+does not. Request spacing is enforced across all workers, not per worker, so
+raising concurrency cannot overrun a rate limit on its own.
 
 ## Pricing
 

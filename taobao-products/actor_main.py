@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from apify import Actor
@@ -44,6 +45,11 @@ ENV_FIXTURES = "ACTOR_SOURCE_FIXTURES"
 
 #: Upper bound on paid search calls per run, whatever the limit asks for.
 MAX_SEARCH_PAGES = 20
+
+#: How many listings are fetched at once by default. The provider is a paid
+#: API billed per call, so the limit on throughput is its rate limit, not
+#: politeness; `min_interval` still spaces every request globally.
+DEFAULT_CONCURRENCY = 5
 
 _ID_IN_QUERY = re.compile(r"[?&]id=(\d+)")
 _ID_IN_OFFER = re.compile(r"/offer/(\d+)")
@@ -156,6 +162,51 @@ def _resolve_ids(
     return ids
 
 
+def _fetch_chunk(
+    data_source: source_mod.ProductSource,
+    item_ids: list[str],
+    *,
+    quantity: int | None,
+    workers: int,
+    platform: str,
+) -> list[normalize_mod.Product]:
+    """Fetch and normalise a group of listings, returned in the order asked.
+
+    Runs in one worker thread of its own, with a small pool inside it. Order is
+    preserved because the records are pushed and billed afterwards in sequence,
+    and a buyer reading the dataset should see the ids they listed.
+    """
+
+    def one(item_id: str) -> normalize_mod.Product:
+        try:
+            raw = data_source.fetch_product(item_id)
+        except Exception as exc:  # one bad listing must not kill the chunk
+            raw = source_mod.RawProduct(
+                item_id=item_id,
+                platform=platform,
+                payload=None,
+                status="upstream_error",
+                status_detail=str(exc),
+            )
+        try:
+            return normalize_mod.normalize(raw, quantity=quantity)
+        except Exception as exc:
+            return normalize_mod.normalize(
+                source_mod.RawProduct(
+                    item_id=item_id,
+                    platform=platform,
+                    payload=None,
+                    status="unparsable",
+                    status_detail=str(exc),
+                )
+            )
+
+    if workers <= 1 or len(item_ids) == 1:
+        return [one(item_id) for item_id in item_ids]
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(one, item_ids))
+
+
 async def main() -> None:
     async with Actor:
         actor_input = await Actor.get_input() or {}
@@ -165,7 +216,8 @@ async def main() -> None:
         include_skus = bool(actor_input.get("includeSkus", True))
         raw_quantity = actor_input.get("quantity")
         quantity = int(raw_quantity) if raw_quantity else None
-        min_interval = max(1.0, float(actor_input.get("minRequestInterval") or 1))
+        concurrency = max(1, min(10, int(actor_input.get("concurrency") or DEFAULT_CONCURRENCY)))
+        min_interval = max(0.0, float(actor_input.get("minRequestInterval") or 0.2))
 
         # A non-monetised Actor (and any non-PPE pricing model) charges nothing,
         # so `charged_count` is always 0 there and must not be read as "limit
@@ -195,59 +247,70 @@ async def main() -> None:
         Actor.log.info("Fetching %d listing(s) from %s.", len(item_ids), platform)
         if quantity:
             Actor.log.info("Pricing each listing at %d piece(s).", quantity)
+        Actor.log.info(
+            "Fetching %d at a time, at least %.2fs apart.", concurrency, min_interval
+        )
 
         returned = skipped = 0
         hit_charge_limit = False
-        for index, item_id in enumerate(item_ids, start=1):
-            Actor.log.info("[%d/%d] %s", index, len(item_ids), item_id)
-            try:
-                raw = await asyncio.to_thread(data_source.fetch_product, item_id)
-                product = normalize_mod.normalize(raw, quantity=quantity)
-            except Exception as exc:  # one bad listing must not kill the run
-                Actor.log.warning("%s failed: %s", item_id, exc)
-                raw = source_mod.RawProduct(
-                    item_id=item_id,
-                    platform=platform,
-                    payload=None,
-                    status="upstream_error",
-                    status_detail=str(exc),
-                )
-                product = normalize_mod.normalize(raw, quantity=quantity)
+        chunks = [
+            item_ids[i : i + concurrency] for i in range(0, len(item_ids), concurrency)
+        ]
+        done = 0
+        for chunk in chunks:
+            products = await asyncio.to_thread(
+                _fetch_chunk,
+                data_source,
+                chunk,
+                quantity=quantity,
+                workers=concurrency,
+                platform=platform,
+            )
 
-            if not include_skus:
-                product.skus = []
-            record = product.to_item()
+            for product in products:
+                done += 1
+                Actor.log.info(
+                    "[%d/%d] %s %s", done, len(item_ids), product.item_id, product.status
+                )
 
-            if product.status != "ok":
-                await Actor.push_data(record)
-                skipped += 1
-                Actor.log.warning(
-                    "  not billed (%s: %s)", product.status, product.status_detail
-                )
-                continue
+                if not include_skus:
+                    product.skus = []
+                record = product.to_item()
 
-            charge = await Actor.push_data(record, charged_event_name=EVENT_PRODUCT)
-            if is_ppe and charge.charged_count == 0:
-                # The run's charge limit no longer covers another item, so
-                # nothing was stored either. `event_charge_limit_reached` alone
-                # is not enough: it is computed from this event's own price and
-                # ignores the synthetic default-dataset event added on top, so
-                # it can read False while pushes already store nothing.
-                Actor.log.warning(
-                    "Run charge limit reached after %d listing(s); stopping early. "
-                    "Raise the run's max total charge to fetch the rest.",
-                    returned,
-                )
-                hit_charge_limit = True
-                break
-            if charge.charged_count > 0 or not is_ppe:
-                returned += 1
-            if is_ppe and charge.event_charge_limit_reached:
-                Actor.log.warning(
-                    "Run charge limit reached after %d listing(s); stopping early.",
-                    returned,
-                )
-                hit_charge_limit = True
+                if product.status != "ok":
+                    await Actor.push_data(record)
+                    skipped += 1
+                    Actor.log.warning(
+                        "  not billed (%s: %s)", product.status, product.status_detail
+                    )
+                    continue
+
+                charge = await Actor.push_data(record, charged_event_name=EVENT_PRODUCT)
+                if is_ppe and charge.charged_count == 0:
+                    # The run's charge limit no longer covers another item, so
+                    # nothing was stored either. `event_charge_limit_reached`
+                    # alone is not enough: it is computed from this event's own
+                    # price and ignores the synthetic default-dataset event
+                    # added on top, so it can read False while pushes already
+                    # store nothing.
+                    Actor.log.warning(
+                        "Run charge limit reached after %d listing(s); stopping early. "
+                        "Raise the run's max total charge to fetch the rest.",
+                        returned,
+                    )
+                    hit_charge_limit = True
+                    break
+                if charge.charged_count > 0 or not is_ppe:
+                    returned += 1
+                if is_ppe and charge.event_charge_limit_reached:
+                    Actor.log.warning(
+                        "Run charge limit reached after %d listing(s); stopping early.",
+                        returned,
+                    )
+                    hit_charge_limit = True
+                    break
+
+            if hit_charge_limit:
                 break
 
         parts = [f"Returned {returned} of {len(item_ids)} listing(s)"]

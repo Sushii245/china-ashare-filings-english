@@ -67,13 +67,22 @@
       "editor": "checkbox",
       "default": true
     },
+    "concurrency": {
+      "title": "Listings fetched at once",
+      "type": "integer",
+      "description": "How many listings to fetch in parallel. Higher is faster; lower it if your provider plan has a tight rate limit. Requests stay spaced by the interval below however many workers run.",
+      "editor": "number",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 10
+    },
     "minRequestInterval": {
       "title": "Minimum seconds between requests",
       "type": "integer",
-      "description": "Politeness delay towards the data source. Can be raised, not removed.",
+      "description": "Spacing between calls to the data provider, enforced across all workers. Raise it if your provider plan has a tight rate limit. The default suits a standard plan.",
       "editor": "number",
       "default": 1,
-      "minimum": 1,
+      "minimum": 0,
       "maximum": 30,
       "sectionCaption": "Advanced"
     },
