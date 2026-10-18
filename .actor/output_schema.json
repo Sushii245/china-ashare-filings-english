@@ -1,0 +1,25 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "Extracted filings",
+  "description": "One record per CNINFO filing: English summary, typed key figures with their Chinese source sentences, and links to the official PDF.",
+  "properties": {
+    "filings": {
+      "type": "string",
+      "title": "Filings (JSON)",
+      "description": "All extracted filings as JSON.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items?clean=true"
+    },
+    "filingsCsv": {
+      "type": "string",
+      "title": "Filings (CSV)",
+      "description": "The same records as CSV, for spreadsheets.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items?clean=true&format=csv"
+    },
+    "datasetView": {
+      "type": "string",
+      "title": "Browse in Console",
+      "description": "Open the dataset in Apify Console.",
+      "template": "{{links.consoleDatasetUrl}}"
+    }
+  }
+}

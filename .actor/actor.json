@@ -9,6 +9,7 @@
   "readme": "./STORE_README.md",
   "changelog": "./CHANGELOG.md",
   "input": "./input_schema.json",
+  "output": "./output_schema.json",
   "storages": {
     "dataset": "./dataset_schema.json"
   },

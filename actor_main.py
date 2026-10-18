@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import datetime, timedelta
 from typing import Any
 
 from apify import Actor
@@ -32,6 +33,12 @@ import parse as parse_mod
 LONG_FILING_PAGES = 50
 
 EVENT_LISTED = "announcement-listed"
+
+#: Date window used when the input leaves the range open. Apify auto-tests a
+#: published Actor every day with its default input and flags it as under
+#: maintenance after three empty or failed runs, so an open range has to
+#: produce results rather than an error.
+DEFAULT_RANGE_DAYS = 30
 EVENT_PROCESSED = "announcement-processed"
 EVENT_PROCESSED_LONG = "announcement-processed-long"
 
@@ -137,11 +144,16 @@ async def main() -> None:
     async with Actor:
         actor_input = await Actor.get_input() or {}
 
-        start = actor_input.get("startDate")
-        end = actor_input.get("endDate")
-        if not start or not end:
-            await Actor.fail(status_message="startDate and endDate are required.")
-            return
+        start = (actor_input.get("startDate") or "").strip()
+        end = (actor_input.get("endDate") or "").strip()
+        if not end:
+            end = datetime.now(fetch_mod.CN_TZ).strftime("%Y-%m-%d")
+        if not start:
+            start = (
+                datetime.strptime(end, "%Y-%m-%d") - timedelta(days=DEFAULT_RANGE_DAYS)
+            ).strftime("%Y-%m-%d")
+        if not actor_input.get("startDate") or not actor_input.get("endDate"):
+            Actor.log.info("No full date range given; using %s to %s.", start, end)
 
         codes = [c.strip() for c in (actor_input.get("stockCodes") or []) if c and c.strip()]
         category = (actor_input.get("category") or "").strip() or None
