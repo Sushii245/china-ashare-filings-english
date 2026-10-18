@@ -10,8 +10,9 @@ samples
 docs
 *.pdf
 REPORT.md
+DEVELOPING.md
 OUTREACH.md
-STORE_README.md
+
 run_samples.py
 
 # Python

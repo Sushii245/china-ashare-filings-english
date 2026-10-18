@@ -6,8 +6,7 @@
   "version": "0.1",
   "buildTag": "latest",
   "dockerfile": "../Dockerfile",
-  "readme": "./STORE_README.md",
-  "changelog": "./CHANGELOG.md",
+  "changelog": "../CHANGELOG.md",
   "input": "./input_schema.json",
   "output": "./output_schema.json",
   "storages": {

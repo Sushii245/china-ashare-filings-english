@@ -8,20 +8,22 @@
       "type": "array",
       "description": "6-digit A-share codes (Shanghai and Shenzhen both supported), e.g. 000001, 600519. Leave empty to search the whole market.",
       "editor": "stringList",
-      "prefill": ["000001"],
+      "prefill": [
+        "000001"
+      ],
       "uniqueItems": true
     },
     "startDate": {
       "title": "Start date",
       "type": "string",
-      "description": "Earliest publication date, YYYY-MM-DD.",
+      "description": "Earliest publication date, YYYY-MM-DD. Leave empty to cover the last 30 days.",
       "editor": "datepicker",
       "prefill": "2025-01-01"
     },
     "endDate": {
       "title": "End date",
       "type": "string",
-      "description": "Latest publication date, YYYY-MM-DD.",
+      "description": "Latest publication date, YYYY-MM-DD. Leave empty to use today.",
       "editor": "datepicker",
       "prefill": "2025-12-31"
     },
@@ -31,8 +33,50 @@
       "description": "Restrict to one CNINFO disclosure category.",
       "editor": "select",
       "default": "",
-      "enum": ["", "dividend", "earnings_forecast", "annual_report", "semiannual_report", "q1_report", "q3_report", "equity_change", "daily_operations", "board_resolution", "shareholder_meeting", "share_incentive", "ipo", "placement", "other_financing", "governance", "intermediary_report", "corrections", "delisting_risk", "supervisor_resolution"],
-      "enumTitles": ["Any category", "Dividend / profit distribution", "Earnings pre-announcement", "Annual report", "Semi-annual report", "Q1 report", "Q3 report", "Equity change", "Daily operations (incl. related-party deals)", "Board resolution", "Shareholder meeting", "Share incentive", "IPO", "Placement", "Other financing", "Corporate governance", "Intermediary report", "Corrections", "Delisting risk", "Supervisor board resolution"]
+      "enum": [
+        "",
+        "dividend",
+        "earnings_forecast",
+        "annual_report",
+        "semiannual_report",
+        "q1_report",
+        "q3_report",
+        "equity_change",
+        "daily_operations",
+        "board_resolution",
+        "shareholder_meeting",
+        "share_incentive",
+        "ipo",
+        "placement",
+        "other_financing",
+        "governance",
+        "intermediary_report",
+        "corrections",
+        "delisting_risk",
+        "supervisor_resolution"
+      ],
+      "enumTitles": [
+        "Any category",
+        "Dividend / profit distribution",
+        "Earnings pre-announcement",
+        "Annual report",
+        "Semi-annual report",
+        "Q1 report",
+        "Q3 report",
+        "Equity change",
+        "Daily operations (incl. related-party deals)",
+        "Board resolution",
+        "Shareholder meeting",
+        "Share incentive",
+        "IPO",
+        "Placement",
+        "Other financing",
+        "Corporate governance",
+        "Intermediary report",
+        "Corrections",
+        "Delisting risk",
+        "Supervisor board resolution"
+      ]
     },
     "keyword": {
       "title": "Title keyword (Chinese)",
@@ -62,8 +106,14 @@
       "description": "Claude model used for extraction. Haiku is the cost-efficient default; Sonnet is more accurate on dense or unusual filings.",
       "editor": "select",
       "default": "claude-haiku-5-5",
-      "enum": ["claude-haiku-5-5", "claude-sonnet-5-5"],
-      "enumTitles": ["Claude Haiku 5.5 (default, fastest/cheapest)", "Claude Sonnet 5.5 (higher accuracy)"]
+      "enum": [
+        "claude-haiku-5-5",
+        "claude-sonnet-5-5"
+      ],
+      "enumTitles": [
+        "Claude Haiku 5.5 (default, fastest/cheapest)",
+        "Claude Sonnet 5.5 (higher accuracy)"
+      ]
     },
     "maxChars": {
       "title": "Max filing characters sent to the model",
@@ -93,6 +143,5 @@
       "isSecret": true,
       "sectionCaption": "Advanced"
     }
-  },
-  "required": ["startDate", "endDate"]
+  }
 }
