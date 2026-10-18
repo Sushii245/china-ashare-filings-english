@@ -160,6 +160,26 @@ as a span across variants has no single unit price to resolve to, so
 
 ---
 
+## Two detail levels
+
+**Full detail** fetches each listing: SKU matrix, wholesale ladder, shipping
+terms, seller scores. One provider call per listing, and it bills accordingly.
+
+**Listing level** sells the search response itself — title, price, sales line
+with its window and unit, seller, image, discount — which is what you actually
+need to shortlist a hundred candidates. One provider call returns a whole page
+of them, so it costs a fraction. Set `detailLevel` to `listing` and give a
+`keyword`.
+
+The normal shape of the work is both: shortlist wide and cheap at listing
+level, then re-run the handful you care about at full detail.
+
+Records from the cheap path carry `status: "listed"` rather than `"ok"`, so you
+can always tell which is which. The fields a search hit cannot carry —
+`skus`, `priceTiers`, `shipping`, `shopScores`, `stock` — come back empty
+rather than null, because absent-from-this-endpoint is not the same as
+the-listing-did-not-say.
+
 ## Throughput
 
 About **280 listings a minute** at the defaults (5 in parallel, requests spaced
@@ -174,7 +194,8 @@ Pay per event — you pay for listings actually returned.
 
 | Event | When it fires |
 |---|---|
-| `product-normalised` | A listing returned with normalised fields. |
+| `product-normalised` | A listing returned with full normalised fields. |
+| `product-listed` | A record built from a search hit, in listing mode. Far cheaper: one provider call returns a whole page. |
 
 **You are not charged** for a listing that does not exist, that the platform
 refused, or whose payload did not fit. Those come back with a `status` saying

@@ -15,6 +15,16 @@ provider configured (see DESIGN.md for why there is no login-free path).
   cumulative) and what is counted (orders, buyers, items).
 - 阶梯价 wholesale ladders as a sorted list of `{minQty, maxQty, unitPrice}`,
   with the top step left open-ended. Minimum order quantity typed separately.
+- A second, much cheaper detail level. `detailLevel: "listing"` sells the
+  search response itself — title, price, sales with its window and unit,
+  seller, image, discount — billing `product-listed` instead of
+  `product-normalised`. One provider call returns a whole page, where full
+  detail is one call per listing. Those records carry `status: "listed"`, and
+  the fields a search hit cannot carry come back empty rather than null, so
+  absent-from-this-endpoint stays distinguishable from the-listing-was-silent.
+- An empty search result page is read as empty rather than as a missing field,
+  which used to yield one garbage hit per page — and in listing mode a garbage
+  hit looks like progress, so pagination carried on spending calls.
 - Optional `quantity` input produces a `quote` per listing: the unit price
   resolved against the 阶梯价 ladder, the subtotal, which tier it landed on,
   and whether the quantity clears the seller's minimum. A span-priced listing

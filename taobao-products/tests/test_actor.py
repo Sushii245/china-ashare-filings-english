@@ -85,10 +85,22 @@ def test_no_input_resolves_to_nothing():
 
 def test_keyword_search_stops_when_a_page_is_empty():
     # FixtureSource returns everything on page 1 and nothing after, so an
-    # unbounded loop here would hang the run rather than fail it.
+    # unbounded loop here would hang the run rather than fail it. A recorded
+    # refusal carries no payload and so contributes no search entry, which is
+    # why it is not in the expected set.
+    import json as _json
+
     source = FixtureSource(FIXTURES)
+    with_payload = sorted(
+        p.stem
+        for p in FIXTURES.glob("*.json")
+        if not p.name.startswith("_")
+        and (lambda d: d.get("payload", d) is not None)(
+            _json.loads(p.read_text(encoding="utf-8"))
+        )
+    )
     ids = actor_main._resolve_ids({"keyword": "x"}, source, limit=1000)
-    assert ids == sorted(p.stem for p in FIXTURES.glob("*.json"))
+    assert ids == with_payload
 
 
 def test_missing_provider_fails_with_an_actionable_message(monkeypatch):

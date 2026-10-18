@@ -8,6 +8,7 @@ settings, not here). The run itself is charged by the platform's built-in
 ``apify-actor-start``, so no start event is charged here:
 
 ``product-normalised``   a listing returned with normalised fields
+``product-listed``       a record built from a search hit, in listing mode
 
 A listing that upstream refused, that does not exist, or whose payload does not
 fit the field map is still written to the dataset with a ``status`` saying which
@@ -33,6 +34,11 @@ import normalize as normalize_mod
 import source as source_mod
 
 EVENT_PRODUCT = "product-normalised"
+
+#: A record built from a search hit. One billed provider call returns a whole
+#: page of these, where a full listing is one call each, so it prices well
+#: below ``product-normalised``.
+EVENT_LISTED = "product-listed"
 
 #: Operator-side provider credentials, set as Actor secrets. A buyer may
 #: override them per run through the input, which is what an organisation with
@@ -211,6 +217,37 @@ def _resolve_ids(
     return ids
 
 
+async def _push_and_charge(
+    record: dict[str, Any], *, event: str, is_ppe: bool, so_far: int
+) -> tuple[bool, bool]:
+    """Store one record and bill it. Returns ``(counted, stop)``.
+
+    One place for this, because the condition below is subtle enough that a
+    second copy would drift away from it.
+    """
+    charge = await Actor.push_data(record, charged_event_name=event)
+    if is_ppe and charge.charged_count == 0:
+        # The run's charge limit no longer covers another item, so nothing was
+        # stored either. `event_charge_limit_reached` alone is not enough: it
+        # is computed from this event's own price and ignores the synthetic
+        # default-dataset event added on top, so it can read False while
+        # pushes already store nothing. Continuing would pay for work that
+        # cannot be delivered.
+        Actor.log.warning(
+            "Run charge limit reached after %d record(s); stopping early. "
+            "Raise the run's max total charge to fetch the rest.",
+            so_far,
+        )
+        return False, True
+    counted = charge.charged_count > 0 or not is_ppe
+    if is_ppe and charge.event_charge_limit_reached:
+        Actor.log.warning(
+            "Run charge limit reached after %d record(s); stopping early.", so_far
+        )
+        return counted, True
+    return counted, False
+
+
 def _fetch_chunk(
     data_source: source_mod.ProductSource,
     item_ids: list[str],
@@ -256,6 +293,78 @@ def _fetch_chunk(
         return list(pool.map(one, item_ids))
 
 
+async def _run_listing_mode(
+    data_source: source_mod.ProductSource,
+    *,
+    keyword: str,
+    platform: str,
+    limit: int,
+    quantity: int | None,
+    is_ppe: bool,
+) -> tuple[int, int, bool]:
+    """Sell the search response itself: one call per page, not per listing.
+
+    A search hit carries the title, price, sales line, seller and an image —
+    enough to shortlist on — and a page of them costs one provider call where
+    fetching each listing in full costs a call each. That is why these bill at
+    their own, much lower rate.
+    """
+    returned = skipped = 0
+    stop = False
+    seen: set[str] = set()
+    page = 1
+
+    while not stop and returned + skipped < limit and page <= MAX_SEARCH_PAGES:
+        entries = await asyncio.to_thread(data_source.search_raw, keyword, page=page)
+        if not entries:
+            break
+
+        fresh = 0
+        for entry in entries:
+            if returned + skipped >= limit:
+                break
+            product = normalize_mod.normalize_search_entry(
+                entry, platform=platform, quantity=quantity
+            )
+            if product.item_id and product.item_id in seen:
+                continue
+            if product.item_id:
+                seen.add(product.item_id)
+            fresh += 1
+
+            record = product.to_item()
+            if product.status != "listed":
+                await Actor.push_data(record)
+                skipped += 1
+                Actor.log.warning(
+                    "  not billed (%s: %s)", product.status, product.status_detail
+                )
+                continue
+
+            counted, stop = await _push_and_charge(
+                record, event=EVENT_LISTED, is_ppe=is_ppe, so_far=returned
+            )
+            if counted:
+                returned += 1
+            if stop:
+                break
+
+        Actor.log.info(
+            "Search page %d: %d hit(s), %d new, %d record(s) so far.",
+            page,
+            len(entries),
+            fresh,
+            returned,
+        )
+        # A provider that repeats a page when results run short would otherwise
+        # keep costing a call per loop.
+        if fresh == 0:
+            break
+        page += 1
+
+    return returned, skipped, stop
+
+
 async def main() -> None:
     async with Actor:
         actor_input = await Actor.get_input() or {}
@@ -289,6 +398,38 @@ async def main() -> None:
             data_source = _build_source(actor_input, platform, min_interval)
         except source_mod.SourceError as exc:
             await Actor.fail(status_message=str(exc))
+            return
+
+        detail_level = (actor_input.get("detailLevel") or "full").strip()
+        if detail_level == "listing":
+            keyword = (actor_input.get("keyword") or "").strip()
+            if not keyword:
+                await Actor.set_status_message(
+                    "Listing mode sells the search response itself, so it needs "
+                    "a search keyword. Give one, or switch to full detail.",
+                    is_terminal=True,
+                )
+                return
+            if actor_input.get("itemIds") or actor_input.get("itemUrls"):
+                Actor.log.warning(
+                    "Listing mode reads search results, so the ids and URLs in "
+                    "this input are ignored. Switch to full detail to fetch them."
+                )
+            Actor.log.info("Listing mode: selling search hits for %r.", keyword)
+            returned, skipped, hit_limit = await _run_listing_mode(
+                data_source,
+                keyword=keyword,
+                platform=platform,
+                limit=limit,
+                quantity=quantity,
+                is_ppe=is_ppe,
+            )
+            parts = [f"Returned {returned} listing-level record(s)"]
+            if skipped:
+                parts.append(f"{skipped} unusable and not billed")
+            if hit_limit:
+                parts.append("stopped at the run's charge limit")
+            await Actor.set_status_message("; ".join(parts) + ".", is_terminal=True)
             return
 
         item_ids = await asyncio.to_thread(_resolve_ids, actor_input, data_source, limit)
@@ -340,29 +481,12 @@ async def main() -> None:
                     )
                     continue
 
-                charge = await Actor.push_data(record, charged_event_name=EVENT_PRODUCT)
-                if is_ppe and charge.charged_count == 0:
-                    # The run's charge limit no longer covers another item, so
-                    # nothing was stored either. `event_charge_limit_reached`
-                    # alone is not enough: it is computed from this event's own
-                    # price and ignores the synthetic default-dataset event
-                    # added on top, so it can read False while pushes already
-                    # store nothing.
-                    Actor.log.warning(
-                        "Run charge limit reached after %d listing(s); stopping early. "
-                        "Raise the run's max total charge to fetch the rest.",
-                        returned,
-                    )
-                    hit_charge_limit = True
-                    break
-                if charge.charged_count > 0 or not is_ppe:
+                counted, hit_charge_limit = await _push_and_charge(
+                    record, event=EVENT_PRODUCT, is_ppe=is_ppe, so_far=returned
+                )
+                if counted:
                     returned += 1
-                if is_ppe and charge.event_charge_limit_reached:
-                    Actor.log.warning(
-                        "Run charge limit reached after %d listing(s); stopping early.",
-                        returned,
-                    )
-                    hit_charge_limit = True
+                if hit_charge_limit:
                     break
 
             if hit_charge_limit:

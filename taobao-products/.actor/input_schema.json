@@ -26,6 +26,21 @@
       "description": "Search the catalogue instead of naming ids, e.g. 蓝牙耳机 or bluetooth earbuds. Results are capped by Max products.",
       "editor": "textfield"
     },
+    "detailLevel": {
+      "title": "Detail level",
+      "type": "string",
+      "description": "Full detail fetches each listing: SKU matrix, wholesale ladder, shipping, seller scores. Listing level sells the search results themselves — title, price, sales, seller, image — which is enough to shortlist on and costs a fraction, because one provider call returns a whole page. Listing level needs a search keyword.",
+      "editor": "select",
+      "default": "full",
+      "enum": [
+        "full",
+        "listing"
+      ],
+      "enumTitles": [
+        "Full detail (one call per listing)",
+        "Listing level (cheap, from search results)"
+      ]
+    },
     "platform": {
       "title": "Platform",
       "type": "string",

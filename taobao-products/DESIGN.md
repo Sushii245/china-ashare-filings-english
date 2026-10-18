@@ -114,6 +114,13 @@ plan (0.01 元, a 52% to 67% margin improvement) because the monthly plan is a
 one-year commitment at 1,500 元/month and breaks even only above ~27,800
 products a month. Revisit once monthly volume is reliably past that.
 
+Listing mode changes the shape of that. A search call costs the same 0.022 元
+but returns a whole page, so at 40 hits a page the upstream cost is $0.000082
+per record. Priced at $0.002 that is a **73% margin** — better than full
+detail, and still 61% if a page only returns ten hits. It is also what a buyer
+shortlisting a hundred candidates actually wants, and it funnels into the
+expensive call for the handful they settle on.
+
 Two things this model makes non-negotiable:
 
 * **Shipping is never a second call.** `item_fee` is a B-class interface at

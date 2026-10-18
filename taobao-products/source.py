@@ -143,6 +143,8 @@ class ProductSource(Protocol):
 
     def search(self, keyword: str, *, page: int = 1) -> list[str]: ...
 
+    def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]: ...
+
 
 def dig(payload: Any, path: str) -> Any:
     """Follow a dotted path with optional list indices into nested JSON.
@@ -214,9 +216,49 @@ class FixtureSource:
 
     def search(self, keyword: str, *, page: int = 1) -> list[str]:
         """Fixture search returns every recorded id, ignoring the keyword."""
+        return [str(e.get("num_iid")) for e in self.search_raw(keyword, page=page)]
+
+    def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]:
+        """Replay a recorded search page, or synthesise one from the payloads.
+
+        A ``_search.json`` captured by ``capture.py`` is used when present;
+        otherwise each stored payload contributes the fields a search response
+        would have carried, so listing mode is testable without one.
+        """
         if page > 1:
             return []
-        return sorted(p.stem for p in self.directory.glob("*.json"))
+        recorded = self.directory / "_search.json"
+        if recorded.exists():
+            data = json.loads(recorded.read_text(encoding="utf-8"))
+            entries = data.get("items") or data.get("entries") or []
+            if entries:
+                return [e for e in entries if isinstance(e, dict)]
+        entries: list[dict[str, Any]] = []
+        for path in sorted(self.directory.glob("*.json")):
+            if path.name.startswith("_"):
+                continue
+            raw = self.fetch_product(path.stem)
+            item = (raw.payload or {}).get("item") if raw.payload else None
+            if not isinstance(item, dict):
+                continue
+            entries.append(
+                {
+                    "num_iid": item.get("num_iid", path.stem),
+                    "title": item.get("title"),
+                    "price": item.get("price"),
+                    "orginal_price": item.get("orginal_price"),
+                    "sales": item.get("sales"),
+                    "nick": item.get("nick"),
+                    "seller_id": item.get("seller_id"),
+                    "location": item.get("location"),
+                    "pic_url": (item.get("item_imgs") or [{}])[0].get("url")
+                    if isinstance(item.get("item_imgs"), list)
+                    and item["item_imgs"]
+                    and isinstance(item["item_imgs"][0], dict)
+                    else None,
+                }
+            )
+        return entries
 
 
 class UpstreamSource:
@@ -349,21 +391,38 @@ class UpstreamSource:
 
     def search(self, keyword: str, *, page: int = 1) -> list[str]:
         """Return item ids for one page of results."""
-        params = self._params(
-            **{self.config.keyword_param: keyword, self.config.page_param: page}
-        )
-        payload = self._get(self.config.search_path, params)
-        items = dig(payload, "items.item") or dig(payload, "items") or []
-        if isinstance(items, dict):
-            items = [items]
         ids: list[str] = []
-        for entry in items:
-            if not isinstance(entry, dict):
-                continue
+        for entry in self.search_raw(keyword, page=page):
             raw_id = entry.get("num_iid") or entry.get("item_id") or entry.get("id")
             if raw_id:
                 ids.append(str(raw_id))
         return ids
+
+    def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]:
+        """One page of search results, as the provider returned them.
+
+        The search response already carries a title, a price and an image per
+        hit. Listing mode sells those directly: one billed call yields a whole
+        page of records, where fetching each listing in full is one call each.
+        """
+        params = self._params(
+            **{self.config.keyword_param: keyword, self.config.page_param: page}
+        )
+        payload = self._get(self.config.search_path, params)
+        # Explicitly None, not falsy: an empty result page is a list, and
+        # treating it as "field missing" falls through to the container above
+        # it and yields one garbage hit. In listing mode that hit looks like
+        # progress, so pagination keeps going and keeps billing.
+        items = dig(payload, "items.item")
+        if items is None:
+            items = dig(payload, "items")
+        if items is None:
+            return []
+        if isinstance(items, dict):
+            items = [items]
+        if not isinstance(items, list):
+            return []
+        return [entry for entry in items if isinstance(entry, dict)]
 
 
 def build_source(

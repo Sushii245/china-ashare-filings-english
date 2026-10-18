@@ -438,3 +438,74 @@ def _discount_pct(price: Money | None, original: Money | None) -> float | None:
     if original.value <= price.value:
         return None
     return round((original.value - price.value) / original.value * 100, 1)
+
+
+#: Where a search hit's fields sit. Search responses are flatter than item
+#: responses — no SKU array, no properties, no shop scores — so they get their
+#: own small map rather than reusing the item one.
+SEARCH_FIELD_MAP: dict[str, str] = {
+    "item_id": "num_iid",
+    "title_cn": "title",
+    "price": "price",
+    "original_price": "orginal_price",
+    "sales": "sales",
+    "shop_name_cn": "nick",
+    "shop_id": "seller_id",
+    "ships_from": "location",
+    "image": "pic_url",
+}
+
+
+def normalize_search_entry(
+    entry: dict[str, Any],
+    *,
+    platform: str,
+    quantity: int | None = None,
+) -> Product:
+    """Turn one search hit into a ``listed`` record.
+
+    A search response already carries the title, price, sales line, seller and
+    an image, so one billed call yields a whole page of usable records where
+    fetching each listing in full costs a call each. The record says
+    ``status: "listed"`` rather than ``ok``, because the fields a search hit
+    cannot carry — the SKU matrix, 阶梯价, shipping terms, shop scores — are
+    absent rather than null-because-the-listing-is-silent.
+    """
+    platform = platform if platform in _URL_TEMPLATES else "taobao"
+    now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+    def field(name: str) -> Any:
+        path = SEARCH_FIELD_MAP.get(name)
+        return dig(entry, path) if path else None
+
+    item_id = _first_str(field("item_id"))
+    title_cn = _first_str(field("title_cn"))
+    if not item_id or not title_cn:
+        return Product(
+            item_id=item_id or "",
+            platform=platform,  # type: ignore[arg-type]
+            url=_URL_TEMPLATES[platform].format(item_id=item_id or ""),
+            status="unparsable",
+            status_detail="search hit carried no id or title",
+            fetched_at=now,
+        )
+
+    price = units.parse_price(_scalar(field("price")))
+    product = Product(
+        item_id=item_id,
+        platform=platform,  # type: ignore[arg-type]
+        url=_URL_TEMPLATES[platform].format(item_id=item_id),
+        status="listed",
+        title_cn=title_cn,
+        price=price,
+        original_price=units.parse_price(_scalar(field("original_price"))),
+        sales=units.parse_sales(_first_str(field("sales"))),
+        shop_name_cn=_first_str(field("shop_name_cn")),
+        shop_id=_first_str(field("shop_id")),
+        images=_normalize_images(field("image")),
+        fetched_at=now,
+    )
+    product.discount_pct = _discount_pct(product.price, product.original_price)
+    if quantity is not None and quantity > 0:
+        product.quote = _build_quote(product, quantity)
+    return product

@@ -25,6 +25,9 @@ SalesWindow = Literal["monthly", "last_30_days", "cumulative"]
 #: instead of failing the run, and none of them is charged.
 Status = Literal[
     "ok",
+    #: Built from a search hit rather than a listing record: the fields a
+    #: search response cannot carry are absent, not null.
+    "listed",
     "not_found",
     "risk_control_blocked",
     "upstream_error",
