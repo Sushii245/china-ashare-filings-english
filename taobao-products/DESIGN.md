@@ -167,7 +167,11 @@ Two constraints that do not change with the provider:
 Bandwidth is metered too: 10,240 MB a month included, then $0.001 per MB. A
 real search page of 50 hits weighed 1.36 MB — most of it per-SKU size data —
 so about 7,500 pages a month fit in the allowance, and past it a page costs
-about $0.0014, under $0.00003 a record. Detail responses are unmeasured yet.
+about $0.0014, under $0.00003 a record. Real detail responses weighed 143 KB to
+1.24 MB — the heavy one has 108 variants and a long HTML description — so at
+Pro's 27,000 calls a month, averaging ~600 KB, bandwidth would run about 6 GB
+past the allowance: roughly $6 a month, $0.0002 a product. Small beside the
+margin, but not zero, and it grows with variant count.
 
 ### Later: Taobao through OneBound
 

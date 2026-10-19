@@ -152,7 +152,10 @@ class ShopScore:
     """
 
     aspect: str
-    aspect_cn: str
+    #: The label the listing prints, when the source gives one. A provider
+    #: that only names the score in English leaves this null rather than
+    #: having a Chinese label invented for it.
+    aspect_cn: str | None
     score: float
     vs_peers_pct: float | None = None
     source_text_cn: str | None = None

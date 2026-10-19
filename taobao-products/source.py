@@ -709,11 +709,9 @@ def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
     path 404s, a page number sent as ``framePosition`` returns the second item
     onwards, a bare offer id is a miss — so they are fixed here once.
 
-    The search map below is written from a real response. The item
-    (``BatchGetItemFullInfo``) map is still empty until a detail call has been
-    captured: guessing it would manufacture fields that read as present and
-    are not. The error paths are OTAPI's documented conventions; the hit-list
-    path ``Result.Items.Items.Content`` is confirmed.
+    Both maps below are written from real responses — one search page and
+    three item details — and the error shape is confirmed too: a bogus id
+    returns ``ErrorCode: NotFound`` with an ``ErrorDescription``.
     """
     return SourceConfig(
         base_url=f"https://{OTAPI_1688_HOST}",
@@ -750,11 +748,55 @@ def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
             # MasterQuantity reads like a count, but a seller's stated stock is
             # not one; flagged until a reason not to is found.
             "stock": {"approximate": True},
+            # Detail-response structures (BatchGetItemFullInfo, 2026-10-20).
+            "skus": {
+                "id": "Id",
+                "stock": "Quantity",
+                "price": "Price.OriginalPrice",
+                "options": "Configurators",
+                "option_name": "Pid",
+                "option_value": "Vid",
+            },
+            # Original* are the seller's Chinese; IsConfigurator marks the
+            # variant axes, which are already in the SKUs.
+            "properties": {
+                "name": "OriginalPropertyName",
+                "value": "OriginalValue",
+                "skip": "IsConfigurator",
+            },
+            "shop_scores": {
+                "aspects": {
+                    "ItemScore": "description_match",
+                    "ServiceScore": "service",
+                    "DeliveryScore": "logistics",
+                }
+            },
         },
         # RapidAPI lists this API's latency at ~2.5s, so the spacing can be
         # small: the round-trip is the limit, not the rate.
         min_interval=0.1,
-        field_map={},
+        # Written from three real BatchGetItemFullInfo responses captured
+        # 2026-10-20. Unmapped on purpose: shipping (DeliveryCosts came back
+        # empty), Location (English), Volume (0), and the item's VendorName
+        # where the vendor's ShopName exists — VendorName is sometimes a login
+        # name and once named a different company.
+        field_map={
+            "item_id": "Result.Item.Id",
+            "title_cn": "Result.Item.OriginalTitle",
+            "title_en": "Result.Item.Title",
+            "price": "Result.Item.Promotions[0].Price.OriginalPrice|Result.Item.Price.OriginalPrice",
+            "original_price": "Result.Item.Price.OriginalPrice",
+            "tiers": "Result.Item.QuantityRanges",
+            "min_order_quantity": "Result.Item.FirstLotQuantity",
+            "sales": "Result.Item.FeaturedValues[Name=SalesInLast30Days].Value",
+            "stock": "Result.Item.MasterQuantity",
+            "shop_name_cn": "Result.Vendor.ShopName|Result.Item.VendorName",
+            "shop_id": "Result.Item.VendorId",
+            "shop_scores": "Result.Vendor.Scores",
+            "images": "Result.Item.Pictures",
+            "skus": "Result.Item.ConfiguredItems",
+            "properties": "Result.Item.Attributes",
+        },
         # Written from a real search response captured 2026-10-19 (50 hits for
         # "T恤 批发"); see tests/fixtures/otapi-1688/. Deliberately unmapped:
         # `payOrder30Day` and `saleNum` (their windows disagree with both the

@@ -130,7 +130,46 @@ def _parse_sku_options(properties_name: str | None) -> dict[str, str]:
     return options
 
 
-def _normalize_skus(raw: Any) -> list[Sku]:
+def _structured_skus(raw: Any, hint: dict[str, Any]) -> list[Sku]:
+    """Variants given as typed objects, axes as a list of name/value pairs.
+
+    OTAPI writes a 1688 variant as ``{"Id", "Quantity", "Price": {...},
+    "Configurators": [{"Pid": "颜色", "Vid": "白色"}, ...]}`` — the axis names
+    and values are the seller's own Chinese, so they go in ``optionsCn``.
+    """
+    skus: list[Sku] = []
+    for entry in _as_list(raw):
+        if not isinstance(entry, dict):
+            continue
+        options: dict[str, str] = {}
+        for axis in _as_list(dig(entry, hint["options"]) if hint.get("options") else None):
+            if not isinstance(axis, dict):
+                continue
+            name = _first_str(axis.get(hint.get("option_name", "name")))
+            value = _first_str(axis.get(hint.get("option_value", "value")))
+            if name and value:
+                options[name] = value
+        stock_raw = _scalar(dig(entry, hint["stock"])) if hint.get("stock") else None
+        stock = (
+            float(stock_raw) if isinstance(stock_raw, (int, float))
+            else units.parse_cn_number(stock_raw)
+        )
+        skus.append(
+            Sku(
+                sku_id=_first_str(dig(entry, hint["id"])) if hint.get("id") else None,
+                options_cn=options,
+                price=units.parse_price(_scalar(dig(entry, hint["price"])))
+                if hint.get("price")
+                else None,
+                stock=int(stock) if stock is not None else None,
+            )
+        )
+    return skus
+
+
+def _normalize_skus(raw: Any, hint: dict[str, Any] | None = None) -> list[Sku]:
+    if hint:
+        return _structured_skus(raw, hint)
     skus: list[Sku] = []
     for entry in _as_list(raw):
         if not isinstance(entry, dict):
@@ -156,6 +195,12 @@ def _normalize_skus(raw: Any) -> list[Sku]:
 def _normalize_images(raw: Any) -> list[str]:
     images: list[str] = []
     for entry in _as_list(raw):
+        if isinstance(entry, dict):
+            # Key case varies by provider: OTAPI's Pictures[] use "Url".
+            entry = next(
+                (value for key, value in entry.items() if key.lower() == "url"),
+                entry,
+            )
         url = _first_str(entry)
         if not url:
             continue
@@ -166,7 +211,7 @@ def _normalize_images(raw: Any) -> list[str]:
     return images
 
 
-def _normalize_attributes(raw: Any) -> dict[str, str]:
+def _normalize_attributes(raw: Any, hint: dict[str, Any] | None = None) -> dict[str, str]:
     """Flatten a property list into ``{axis: value}``.
 
     Providers send this as ``{"1627207:28320": "颜色分类:黑色"}``, as
@@ -178,6 +223,26 @@ def _normalize_attributes(raw: Any) -> dict[str, str]:
     in front of a buyer who cannot act on it.
     """
     attributes: dict[str, str] = {}
+    if hint and isinstance(raw, list):
+        # Typed name/value records. Entries flagged by the hint's "skip" key
+        # (OTAPI's IsConfigurator) are variant axes, already in the SKUs. A
+        # property listed several times keeps every value: a plain dict would
+        # silently keep the last of seven 主要销售地区.
+        for entry in raw:
+            if not isinstance(entry, dict):
+                continue
+            if hint.get("skip") and entry.get(hint["skip"]):
+                continue
+            axis = _first_str(entry.get(hint.get("name", "name")))
+            value = _first_str(entry.get(hint.get("value", "value")))
+            if not axis or not value:
+                continue
+            if axis in attributes:
+                if value not in attributes[axis].split("、"):
+                    attributes[axis] = f"{attributes[axis]}、{value}"
+            else:
+                attributes[axis] = value
+        return attributes
     if isinstance(raw, dict):
         for key, value in raw.items():
             text = _first_str(value)
@@ -204,9 +269,22 @@ def _normalize_attributes(raw: Any) -> dict[str, str]:
     return attributes
 
 
-def _normalize_shop_scores(raw: Any) -> list[ShopScore]:
-    """Build the three seller scores from whatever shape arrived."""
+def _normalize_shop_scores(raw: Any, hint: dict[str, Any] | None = None) -> list[ShopScore]:
+    """Build the three seller scores from whatever shape arrived.
+
+    With an ``aspects`` hint the source is a dict of typed scores keyed by the
+    provider's own names, e.g. OTAPI's ``{"ItemScore": 3.0, "ServiceScore":
+    4.0, "DeliveryScore": 3.4}``. Those carry no Chinese label, so
+    ``aspect_cn`` stays null rather than having one invented.
+    """
     scores: list[ShopScore] = []
+    if hint and hint.get("aspects") and isinstance(raw, dict):
+        for key, aspect in hint["aspects"].items():
+            score = units.parse_cn_number(_first_str(raw.get(key)))
+            if score is None:
+                continue
+            scores.append(ShopScore(aspect=aspect, aspect_cn=None, score=score))
+        return scores
     entries = _as_list(raw)
     if len(entries) == 1 and isinstance(entries[0], dict):
         single = entries[0]
@@ -382,20 +460,28 @@ def normalize(
 
     # A range field, when the provider sends one, is more informative than the
     # single price, which is usually just the low end of the same span.
-    skus = _normalize_skus(field("skus"))
+    skus = _normalize_skus(field("skus"), hints.get("skus"))
 
     # A provider that states the span outright is best. Most do not — the
     # OneBound docs define no price_range field — so the span is taken from the
     # SKU prices instead. It carries no source_text_cn, because the listing
     # never printed it as a range: a null there means "derived, not quoted".
+    original_price = units.parse_price(_scalar(field("original_price")))
     price = units.parse_price(_scalar(field("price_range")))
     if price is None:
         price = units.parse_price(_scalar(field("price")))
         # The listing price counts as a candidate alongside the variants. A
         # listing at 9.90 with one variant priced 19.90 is a span, even though
-        # only one variant carries a price of its own.
+        # only one variant carries a price of its own. But not when it is a
+        # promotion: variants carry the regular price, and mixing the two
+        # turned "3.14 on promotion, normally 3.30" into a 3.14-3.30 span.
         candidates = [s.price.value for s in skus if s.price]
-        if price is not None:
+        on_promotion = (
+            price is not None
+            and original_price is not None
+            and price.value < original_price.value
+        )
+        if price is not None and not on_promotion:
             candidates.append(price.value)
         if price is not None and len(set(candidates)) > 1:
             price = Money(value=min(candidates), value_max=max(candidates))
@@ -431,7 +517,7 @@ def normalize(
         title_cn=title_cn,
         title_en=title_en,
         price=price,
-        original_price=units.parse_price(_scalar(field("original_price"))),
+        original_price=original_price,
         price_tiers=_normalize_tiers(field("tiers"), hints.get("tiers")),
         min_order_quantity=units.parse_quantity(_scalar(field("min_order_quantity"))),
         sales=_sales(field("sales"), hints.get("sales")),
@@ -455,11 +541,11 @@ def normalize(
             if _first_str(field("shop_id"))
             else None
         ),
-        shop_scores=_normalize_shop_scores(field("shop_scores")),
+        shop_scores=_normalize_shop_scores(field("shop_scores"), hints.get("shop_scores")),
         skus=skus,
         sku_count=len(skus) or None,
         images=_normalize_images(field("images")),
-        attributes_cn=_normalize_attributes(field("properties")),
+        attributes_cn=_normalize_attributes(field("properties"), hints.get("properties")),
         fetched_at=now,
     )
 

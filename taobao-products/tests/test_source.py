@@ -386,10 +386,12 @@ def test_the_preset_sends_the_required_language_and_keyword_names():
     assert params["ItemTitle"] == "蓝牙耳机"  # not the generic "q"
 
 
-def test_the_preset_leaves_the_field_map_empty_on_purpose():
-    # Guessing it would produce fields that read as present and are not. It is
-    # written from a real response by capture.py + audit.py.
-    assert source_mod.otapi_1688_config("k").field_map == {}
+def test_the_preset_maps_are_written_from_real_responses():
+    # Empty until 2026-10-20, then written from real captures; the fixtures
+    # under tests/fixtures/otapi-1688 hold them to it.
+    config = source_mod.otapi_1688_config("k")
+    assert config.field_map["title_cn"] == "Result.Item.OriginalTitle"
+    assert config.search_field_map["title_cn"] == "OriginalTitle"
 
 
 def test_a_page_param_provider_still_pages_by_page():

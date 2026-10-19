@@ -204,3 +204,22 @@ def test_listing_mode_on_the_real_otapi_capture(tmp_path):
     quote = by_id["669724481680"]["quote"]
     assert quote["unitPrice"]["value"] == 4.3
     assert quote["meetsMinimumOrder"] is False
+
+
+def test_full_detail_on_the_real_otapi_captures(tmp_path):
+    # The whole Actor on three real detail responses and a real refusal:
+    # quotes, billing, and the not-found id left unbilled.
+    ids = ["623219903269", "669724481680", "672715568844", "999999999"]
+    run = run_actor(
+        tmp_path,
+        {"itemIds": ids, "platform": "1688", "quantity": 50},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    by_id = {r["itemId"]: r for r in run.records}
+    assert [by_id[i]["status"] for i in ids[:3]] == ["ok", "ok", "ok"]
+    assert by_id["999999999"]["status"] == "not_found"
+    assert [by_id[i]["quote"]["unitPrice"]["value"] for i in ids[:3]] == [26.9, 4.3, 40.0]
+    assert "Returned 3 of 4 listing(s); 1 unavailable and not billed." in run.log

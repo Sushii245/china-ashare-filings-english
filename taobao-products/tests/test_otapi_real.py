@@ -144,3 +144,116 @@ def test_stock_is_read_and_flagged():
     hit = next(h for h in HITS if h["Id"] == "abb-623219903269")
     assert stock["value"] == hit["MasterQuantity"]
     assert stock["isApproximate"] is True
+
+
+# --------------------------------------------------------- detail responses
+#
+# tests/fixtures/otapi-1688/<id>.json are real BatchGetItemFullInfo responses
+# captured 2026-10-20 for three ids from the search above, plus a bogus id,
+# trimmed as each file's "note" says.
+
+from normalize import normalize  # noqa: E402
+
+
+def detail(item_id: str, quantity: int | None = None) -> dict:
+    return normalize(SOURCE.fetch_product(item_id), config=CONFIG, quantity=quantity).to_item()
+
+
+DETAIL_IDS = ["623219903269", "669724481680", "672715568844"]
+
+
+@pytest.mark.parametrize("item_id", DETAIL_IDS)
+def test_every_real_detail_normalises(item_id):
+    record = detail(item_id)
+    assert record["status"] == "ok"
+    assert record["itemId"] == item_id
+    assert record["url"] == f"https://detail.1688.com/offer/{item_id}.html"
+    assert CJK.search(record["titleCn"]) and not CJK.search(record["titleEn"])
+
+
+@pytest.mark.parametrize(
+    "item_id,moq,tiers",
+    [
+        ("623219903269", 1, [(1, 99, 26.9), (100, 4999, 25.9), (5000, None, 24.9)]),
+        ("669724481680", 2, [(2, 99, 4.3), (100, 9999, 4.0), (10000, None, 3.3)]),
+        ("672715568844", 1, [(1, 998, 40.0), (999, None, 35.0)]),
+    ],
+)
+def test_the_detail_carries_the_minimum_order_and_ladder(item_id, moq, tiers):
+    record = detail(item_id)
+    assert record["minOrderQuantity"]["value"] == moq
+    assert [(t["minQty"], t["maxQty"], t["unitPrice"]["value"]) for t in record["priceTiers"]] == tiers
+
+
+@pytest.mark.parametrize(
+    "item_id,unit,headline",
+    [("623219903269", 26.9, 24.9), ("669724481680", 4.3, 3.14), ("672715568844", 40.0, 33.25)],
+)
+def test_a_50_piece_order_is_never_quoted_at_the_headline(item_id, unit, headline):
+    record = detail(item_id, quantity=50)
+    assert record["price"]["value"] == headline
+    assert record["quote"]["unitPrice"]["value"] == unit > headline
+    assert record["quote"]["subtotal"]["value"] == round(unit * 50, 2)
+    assert record["quote"]["meetsMinimumOrder"] is True
+
+
+def test_one_piece_under_a_minimum_of_two_is_flagged():
+    quote = detail("669724481680", quantity=1)["quote"]
+    assert quote["meetsMinimumOrder"] is False
+    assert quote["unitPrice"]["value"] == 4.3
+
+
+@pytest.mark.parametrize("item_id,promo,regular", [("669724481680", 3.14, 3.3), ("672715568844", 33.25, 35.0)])
+def test_a_promotion_is_not_turned_into_a_price_span(item_id, promo, regular):
+    # The variants carry the regular price. Mixing it with the promotion used
+    # to read as a 3.14-3.30 span.
+    record = detail(item_id)
+    assert record["price"]["value"] == promo
+    assert record["price"]["valueMax"] is None
+    assert record["originalPrice"]["value"] == regular
+    assert record["discountPct"] == round((regular - promo) / regular * 100, 1)
+
+
+def test_the_shop_is_the_registered_company_not_the_login():
+    # The item's VendorName is "tfih666" here; the vendor's ShopName is the
+    # company a buyer would contract with.
+    record = detail("623219903269")
+    assert record["shopNameCn"] == "青岛圣英针纺服饰有限公司"
+    assert record["shopId"] and not record["shopId"].startswith("abb-")
+
+
+def test_three_seller_scores_without_invented_chinese_labels():
+    scores = {s["aspect"]: s for s in detail("623219903269")["shopScores"]}
+    assert set(scores) == {"description_match", "service", "logistics"}
+    assert (scores["description_match"]["score"], scores["service"]["score"],
+            scores["logistics"]["score"]) == (3.0, 4.0, 3.4)
+    assert all(s["aspectCn"] is None for s in scores.values())
+
+
+def test_variant_axes_are_the_sellers_own_chinese():
+    record = detail("623219903269")
+    raw = json.loads((FIXTURE_DIR / "623219903269.json").read_text(encoding="utf-8"))
+    kept = raw["payload"]["Result"]["Item"]["ConfiguredItems"]
+    assert record["skuCount"] == len(kept)
+    first = record["skus"][0]
+    assert first["optionsCn"] == {"颜色": "白色", "尺码": "S"}
+    assert first["optionsEn"] is None
+    assert first["stock"] == kept[0]["Quantity"]
+
+
+def test_attributes_leave_out_the_variant_axes_and_keep_every_value():
+    attributes = detail("672715568844")["attributesCn"]
+    # Variant axes (IsConfigurator) are in the SKUs, not here.
+    assert "颜色" not in attributes and "尺码" not in attributes
+    # Listed seven times in the response; a plain dict would keep only one.
+    assert attributes["主要销售地区"].count("、") == 6
+
+
+def test_images_are_read_from_capitalised_keys():
+    assert detail("623219903269")["images"][0].startswith("https://cbu01.alicdn.com/")
+
+
+def test_the_bogus_id_is_not_found():
+    record = detail("1")
+    assert record["status"] == "not_found"
+    assert record["statusDetail"] == "NotFound: Item with id='1' not found."

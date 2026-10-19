@@ -41,8 +41,22 @@ margin and pays for itself after about 2,900 products a month.
   billed call for an empty page 2. Sales: `SalesInLast30Days` is mapped;
   `payOrder30Day` and `saleNum` disagree with both it and `TotalSales`, so they
   are left unmapped until their meaning is known.
-- **Next — detail calls.** `BatchGetItemFullInfo` on three of those ids plus a
-  bogus one, to write the item map.
+- **2026-10-20 — details: done.** Four calls: three ids from that search and
+  a bogus one. All fifteen mapped fields resolve on real data, and the bogus id
+  comes back `ErrorCode: NotFound`, classified `not_found` and unbilled. The
+  item map is written; trimmed copies are fixtures, and the whole Actor replays
+  them end to end. Findings that changed code: the minimum order is
+  `FirstLotQuantity`; a promotion lives at `Promotions[0]` here but
+  `PromotionPrice` in search; variants carry the *regular* price, which mixed
+  with a promotion used to read as a false price span; the item's
+  `VendorName` is sometimes a login and once a different company, so the
+  vendor's `ShopName` wins; seller scores are typed (`Vendor.Scores`) with no
+  Chinese label, so `aspectCn` is null; a property listed several times (seven
+  `主要销售地区`) keeps every value; picture URLs sit under `Url`.
+- **Total spent on validation: 5 calls**, inside the free tier.
+- **Left before publishing:** the abuse protections (free-plan cap, failure
+  circuit breaker, a priced run start), throughput measured against real
+  latency, and the checks below.
 
 ## Phase 0 — sign up (0 calls)
 

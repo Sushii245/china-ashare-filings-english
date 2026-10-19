@@ -34,6 +34,12 @@ a real response first (VALIDATION.md).
   page size itself.
 - A field path may name alternatives (`a|b`), used for a promotion price that
   falls back to the regular one.
+- Full-detail records are read from the data source's real item responses:
+  minimum order, ladder, promotion, the registered company as the shop, three
+  typed seller scores, variants with their Chinese axes, and the seller's
+  attributes with variant axes left out and repeated properties kept whole.
+- A promotion price is no longer mixed with the regular variant prices into a
+  false price span.
 - `titleCn` and `titleEn` are kept apart, and a title with no Chinese in it is
   never put in `titleCn`.
 - `sourceTextCn` is filled where a value was read from listing text and null
