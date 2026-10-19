@@ -193,10 +193,14 @@ independently would be N times the intended rate, which is how a rate limit
 gets tripped. Measured against a 300 ms round-trip: ~61/min serial at the old
 1 s spacing, ~284/min at the defaults, ~525/min at ten workers and 0.1 s.
 
-Chunking keeps the billing path intact: a chunk is fetched in parallel, then
-its records are pushed and charged in sequence, so the charge-limit check still
-sees one item at a time and stops without having paid for work it cannot
-deliver.
+Batching keeps the billing path intact: a batch is fetched in parallel, then
+its records are pushed and charged in sequence. Before each batch the Actor asks
+the SDK how many more records the run's charge limit covers — counting the
+event's price and the default-dataset item price together — and fetches only
+that many. An earlier version checked only after pushing, so a limit reached
+part-way through a batch had already paid the data source for the rest of it.
+The same check runs before each search page in listing mode, since a page is
+itself a billed call.
 
 ## Validating the map
 

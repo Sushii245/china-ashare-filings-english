@@ -389,7 +389,19 @@ async def _run_listing_mode(
     seen: set[str] = set()
     page = 1
 
+    charging = Actor.get_charging_manager()
     while not stop and returned + skipped < limit and page <= MAX_SEARCH_PAGES:
+        # A search page is one billed data-source call. If the run cannot pay
+        # for even one more record, that call buys nothing deliverable.
+        if is_ppe and charging.compute_push_data_limit(
+            1, EVENT_LISTED, is_default_dataset=True
+        ) <= 0:
+            Actor.log.warning(
+                "Run charge limit covers no more records; not requesting page %d.",
+                page,
+            )
+            stop = True
+            break
         entries = await asyncio.to_thread(data_source.search_raw, keyword, page=page)
         if not entries:
             break
@@ -525,11 +537,38 @@ async def main() -> None:
 
         returned = skipped = 0
         hit_charge_limit = False
-        chunks = [
-            item_ids[i : i + concurrency] for i in range(0, len(item_ids), concurrency)
-        ]
+        charging = Actor.get_charging_manager()
+        pending = list(item_ids)
         done = 0
-        for chunk in chunks:
+        while pending:
+            # Ask what the run can still pay for *before* fetching, not after.
+            # A batch is fetched in parallel and only then pushed and billed,
+            # so a limit discovered mid-batch would already have paid the data
+            # source for listings that can never be delivered. The SDK's
+            # figure counts this event and the synthetic default-dataset item
+            # event together; a non-PPE run gets the whole batch.
+            wanted = min(concurrency, len(pending))
+            size = (
+                charging.compute_push_data_limit(
+                    wanted, EVENT_PRODUCT, is_default_dataset=True
+                )
+                if is_ppe
+                else wanted
+            )
+            if size <= 0:
+                Actor.log.warning(
+                    "Run charge limit covers no more listings; stopping before "
+                    "fetching the remaining %d.",
+                    len(pending),
+                )
+                hit_charge_limit = True
+                break
+            chunk, pending = pending[:size], pending[size:]
+            Actor.log.info(
+                "Fetching a batch of %d%s.",
+                size,
+                " (all the charge limit still covers)" if size < wanted else "",
+            )
             products = await asyncio.to_thread(
                 _fetch_chunk,
                 data_source,
@@ -572,7 +611,11 @@ async def main() -> None:
         if skipped:
             parts.append(f"{skipped} unavailable and not billed")
         if hit_charge_limit:
-            parts.append("stopped at the run's charge limit")
+            unfetched = len(pending)
+            parts.append(
+                "stopped at the run's charge limit"
+                + (f", {unfetched} not fetched" if unfetched else "")
+            )
         await Actor.set_status_message("; ".join(parts) + ".", is_terminal=True)
 
 

@@ -334,6 +334,17 @@ class FixtureSource:
         self.config = config or SourceConfig(base_url="")
 
     def fetch_product(self, item_id: str) -> RawProduct:
+        """One listing — the fixture equivalent of one billed call."""
+        return self._read(item_id)
+
+    def _read(self, item_id: str) -> RawProduct:
+        """Load a recorded payload without counting as a call.
+
+        Kept apart from fetch_product so that synthesising a search page out
+        of stored listings does not look, to anything watching the call
+        boundary, like a fetch per listing — the live client's search makes
+        exactly one call.
+        """
         path = self.directory / f"{item_id}.json"
         if not path.exists():
             wire = self.directory / f"{self.config.to_wire_id(item_id)}.json"
@@ -385,7 +396,7 @@ class FixtureSource:
         for path in sorted(self.directory.glob("*.json")):
             if path.name.startswith("_"):
                 continue
-            raw = self.fetch_product(path.stem)
+            raw = self._read(path.stem)
             item = (raw.payload or {}).get("item") if raw.payload else None
             if not isinstance(item, dict):
                 continue

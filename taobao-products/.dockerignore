@@ -1,0 +1,12 @@
+# The image needs the Actor's modules and nothing else. Without this file
+# `COPY . ./` would ship a macOS virtualenv, local run storage including
+# INPUT.json, and any provider payloads captured into tests/fixtures/live.
+.venv/
+storage/
+tests/
+samples/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.git/
