@@ -61,6 +61,10 @@ MAX_SEARCH_PAGES = 20
 #: politeness; `min_interval` still spaces every request globally.
 DEFAULT_CONCURRENCY = 5
 
+#: Seconds between requests when the input leaves it unset. Matches the input
+#: schema default; kept here too for runs started through the API without it.
+DEFAULT_MIN_INTERVAL = 0.2
+
 _ID_IN_QUERY = re.compile(r"[?&]id=(\d+)")
 _ID_IN_OFFER = re.compile(r"/offer/(\d+)")
 
@@ -85,6 +89,23 @@ def item_id_from_url(url: str) -> str | None:
         return None
     match = _ID_IN_QUERY.search(url) or _ID_IN_OFFER.search(url)
     return match.group(1) if match else None
+
+
+def _min_interval(actor_input: dict[str, Any]) -> float:
+    """The request spacing the buyer asked for, in seconds.
+
+    Read with an explicit None check, not ``or``: 0 is a real choice — no
+    spacing, parallelism as the only limit — and ``0 or default`` silently
+    turned it back into the default. Negative values clamp to 0, and a value
+    that is not a number falls back to the default rather than failing the run.
+    """
+    raw = actor_input.get("minRequestInterval")
+    if raw is None or raw == "":
+        return DEFAULT_MIN_INTERVAL
+    try:
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        return DEFAULT_MIN_INTERVAL
 
 
 def _validate_platform(platform: str) -> str:
@@ -435,7 +456,7 @@ async def main() -> None:
         raw_quantity = actor_input.get("quantity")
         quantity = int(raw_quantity) if raw_quantity else None
         concurrency = max(1, min(10, int(actor_input.get("concurrency") or DEFAULT_CONCURRENCY)))
-        min_interval = max(0.0, float(actor_input.get("minRequestInterval") or 0.2))
+        min_interval = _min_interval(actor_input)
 
         # A non-monetised Actor (and any non-PPE pricing model) charges nothing,
         # so `charged_count` is always 0 there and must not be read as "limit

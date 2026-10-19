@@ -89,10 +89,10 @@
     },
     "minRequestInterval": {
       "title": "Minimum seconds between requests",
-      "type": "integer",
-      "description": "Spacing between calls to the data provider, enforced across all workers. Raise it if your provider plan has a tight rate limit. The default suits a standard plan.",
+      "type": "number",
+      "description": "Seconds between calls to the data source, enforced across all workers — decimals allowed, e.g. 0.2. 0 removes the spacing, leaving parallelism as the only limit. Raise it if your provider plan has a tight rate limit.",
       "editor": "number",
-      "default": 1,
+      "default": 0.2,
       "minimum": 0,
       "maximum": 30,
       "sectionCaption": "Advanced"

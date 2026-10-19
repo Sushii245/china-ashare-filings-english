@@ -355,3 +355,45 @@ def test_every_dataset_view_field_exists_on_a_record():
     for view, body in schema["views"].items():
         for field in body["transformation"]["fields"]:
             assert field in record, f"view {view!r} names {field!r}, which no record has"
+
+
+# ------------------------------------------------------------ request spacing
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [
+        ({}, 0.2),                                   # unset: the default
+        ({"minRequestInterval": None}, 0.2),
+        ({"minRequestInterval": 0.2}, 0.2),
+        ({"minRequestInterval": 0.05}, 0.05),        # decimals are allowed
+        ({"minRequestInterval": 1}, 1.0),
+        ({"minRequestInterval": 0}, 0.0),            # 0 means 0, not the default
+        ({"minRequestInterval": 0.0}, 0.0),
+        ({"minRequestInterval": -3}, 0.0),           # clamped, not an error
+        ({"minRequestInterval": "0.5"}, 0.5),
+        ({"minRequestInterval": "fast"}, 0.2),       # unreadable: the default
+    ],
+)
+def test_min_interval_reads_the_input(given, expected):
+    # Regression: the value was read as `x or 0.2`, so 0 became 0.2; and the
+    # schema typed it as an integer defaulting to 1, which held every run to
+    # one request a second whatever the concurrency.
+    assert actor_main._min_interval(given) == expected
+
+
+def test_the_schema_default_matches_the_code_default():
+    import json
+
+    schema = json.loads((ROOT / ".actor" / "input_schema.json").read_text(encoding="utf-8"))
+    field = schema["properties"]["minRequestInterval"]
+    assert field["type"] == "number"
+    assert field["default"] == actor_main.DEFAULT_MIN_INTERVAL
+    assert field["minimum"] == 0
+
+
+def test_the_chosen_interval_reaches_the_client(monkeypatch):
+    monkeypatch.delenv(actor_main.ENV_FIXTURES, raising=False)
+    monkeypatch.setenv(actor_main.ENV_PROVIDER, "otapi-1688")
+    monkeypatch.setenv(actor_main.ENV_API_KEY, "k")
+    built = actor_main._build_source({}, "1688", actor_main._min_interval({"minRequestInterval": 0}))
+    assert built.config.min_interval == 0.0
