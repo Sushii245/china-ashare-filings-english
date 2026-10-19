@@ -198,6 +198,16 @@ class SourceConfig:
     )
 
 
+    @property
+    def known_page_size(self) -> int | None:
+        """The page size the provider is held to, if we set it ourselves.
+
+        Only when the request names its own page size (``page_size_param``) is
+        a short page proof that the results have run out. Assuming a size for a
+        provider that picks its own would cut searches short silently.
+        """
+        return self.page_size if self.page_size_param else None
+
     def to_wire_id(self, item_id: str) -> str:
         """The id as the provider wants it on a request."""
         if self.id_prefix and not item_id.startswith(self.id_prefix):
@@ -262,9 +272,19 @@ def dig(payload: Any, path: str) -> Any:
     use for name/value property lists, which a positional index cannot address
     because the order is not stable.
 
+    ``a.b|c.d`` tries each alternative in order and returns the first that
+    resolves to something non-empty — e.g. a promotion price when there is
+    one, the regular price otherwise.
+
     Returns ``None`` for any missing link rather than raising, because a
     provider leaving a field out is normal and must not fail the item.
     """
+    if "|" in path:
+        for alternative in path.split("|"):
+            value = dig(payload, alternative.strip())
+            if value not in (None, "", [], {}):
+                return value
+        return None
     current = payload
     for part in path.split("."):
         if current is None:
@@ -689,11 +709,11 @@ def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
     path 404s, a page number sent as ``framePosition`` returns the second item
     onwards, a bare offer id is a miss — so they are fixed here once.
 
-    Deliberately *not* filled in: the item and search field maps. No sample
-    response is published, and guessing them would manufacture fields that
-    read as present and are not; ``capture.py`` + ``audit.py`` write them from
-    a real response. The error and hit-list paths below are OTAPI's documented
-    conventions offered as candidates — each is only used if it resolves.
+    The search map below is written from a real response. The item
+    (``BatchGetItemFullInfo``) map is still empty until a detail call has been
+    captured: guessing it would manufacture fields that read as present and
+    are not. The error paths are OTAPI's documented conventions; the hit-list
+    path ``Result.Items.Items.Content`` is confirmed.
     """
     return SourceConfig(
         base_url=f"https://{OTAPI_1688_HOST}",
@@ -719,14 +739,42 @@ def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
             "Items.Content",
         ),
         search_id_keys=("Id", "id", "ItemId"),
-        # Unknown until audited. Stock stays flagged approximate until a real
-        # response says otherwise — claiming less precision is the safe error.
-        hints={"stock": {"approximate": True}},
+        hints={
+            # SalesInLast30Days is a bare number whose window is in its name.
+            # Its unit is left unstated: hits carry a separate `unit` of 件 or
+            # 套, but nothing says the 30-day figure counts pieces rather than
+            # orders, and claiming less is the safe error.
+            "sales": {"window": "last_30_days"},
+            # Rungs are typed objects giving only a starting quantity each.
+            "tiers": {"min_qty": "MinQuantity", "price": "Price.OriginalPrice"},
+            # MasterQuantity reads like a count, but a seller's stated stock is
+            # not one; flagged until a reason not to is found.
+            "stock": {"approximate": True},
+        },
         # RapidAPI lists this API's latency at ~2.5s, so the spacing can be
         # small: the round-trip is the limit, not the rate.
         min_interval=0.1,
         field_map={},
-        search_field_map={},
+        # Written from a real search response captured 2026-10-19 (50 hits for
+        # "T恤 批发"); see tests/fixtures/otapi-1688/. Deliberately unmapped:
+        # `payOrder30Day` and `saleNum` (their windows disagree with both the
+        # 30-day and the cumulative figures, so their meaning is unknown),
+        # `Volume` (0 on every hit), and `Location` (English, so it cannot go
+        # in a field named shipsFromCn).
+        search_field_map={
+            "item_id": "Id",
+            "title_cn": "OriginalTitle",
+            "title_en": "Title",
+            # A promotion price when there is one, the regular price otherwise.
+            "price": "PromotionPrice.OriginalPrice|Price.OriginalPrice",
+            "original_price": "Price.OriginalPrice",
+            "sales": "FeaturedValues[Name=SalesInLast30Days].Value",
+            "tiers": "QuantityRanges",
+            "stock": "MasterQuantity",
+            "shop_name_cn": "VendorName",
+            "shop_id": "VendorId",
+            "image": "MainPictureUrl",
+        },
     )
 
 

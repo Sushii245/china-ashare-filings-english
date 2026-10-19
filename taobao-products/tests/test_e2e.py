@@ -182,3 +182,25 @@ def test_an_unserved_platform_fails_before_any_call(tmp_path):
     assert run.records == []
     assert run.fetched == [] and run.searched_pages == []
     assert "serves 1688 only" in run.log
+
+
+def test_listing_mode_on_the_real_otapi_capture(tmp_path):
+    # The whole Actor, reading a real provider response through the preset's
+    # maps — the replay VALIDATION.md's Phase 5 describes.
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "detailLevel": "listing", "platform": "1688", "quantity": 1},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.searched_pages == [1]
+    assert run.fetched == []
+    assert len(run.records) == 5
+    assert {r["status"] for r in run.records} == {"listed"}
+    by_id = {r["itemId"]: r for r in run.records}
+    # One piece of a ladder that starts at two: the first rung's 4.3, flagged.
+    quote = by_id["669724481680"]["quote"]
+    assert quote["unitPrice"]["value"] == 4.3
+    assert quote["meetsMinimumOrder"] is False

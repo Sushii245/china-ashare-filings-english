@@ -416,16 +416,17 @@ def test_the_ladder_is_walked_for_the_asked_quantity(source, quantity, unit, sub
 
 
 def test_a_quantity_below_the_minimum_is_flagged_but_still_priced(source):
-    # The MOQ on this listing is 2, and the ladder starts at 2, so one piece
-    # matches no step. Refusing to price it would be less useful than pricing
-    # it off the headline figure and flagging that the order cannot be placed
-    # as asked — which is what meetsMinimumOrder is for. tierSourceTextCn
-    # stays null, so the buyer can tell this did not come from a ladder step.
+    # The MOQ is 2 and the ladder starts at 2, so one piece matches no rung.
+    # It is priced at the first rung — what the smallest order the seller
+    # accepts costs — not at the headline, and flagged as below the minimum.
+    # (Here the two happen to be equal, 12.00, which is how the old fallback to
+    # the headline went unnoticed; on real 1688 data the headline is the
+    # cheapest rung, and they are not.)
     quote = normalize(source.fetch_product("612345678901"), quantity=1).to_item()["quote"]
     assert quote["meetsMinimumOrder"] is False
     assert quote["unitPrice"]["value"] == 12.0
     assert quote["subtotal"]["value"] == 12.0
-    assert quote["tierSourceTextCn"] is None
+    assert quote["tierSourceTextCn"] == "2-99件 12.00"
 
 
 def test_a_flat_priced_listing_quotes_off_the_single_price(source):
@@ -526,14 +527,15 @@ def test_overlapping_tiers_quote_the_dearer_one(tmp_path):
     assert quote["tierSourceTextCn"] == "100-999件 10.50"
 
 
-def test_a_quantity_in_a_gap_falls_back_to_the_listing_price(tmp_path):
-    # 300 matches no rung here. The headline price is the honest fallback, and
-    # a null tierSourceTextCn tells the buyer it did not come from a rung.
+def test_a_quantity_in_a_gap_is_priced_at_the_rung_below(tmp_path):
+    # 300 matches no rung here. A rung's price holds until the next begins, so
+    # the 1-99 rung applies; the headline is never the fallback while a ladder
+    # exists, since on 1688 it is the cheapest rung.
     source = _ladder(tmp_path, '[{"range":"1-99件","price":"12.00"},'
                                ' {"range":"500-999件","price":"9.00"}]')
     quote = normalize(source.fetch_product("1"), quantity=300).to_item()["quote"]
     assert quote["unitPrice"]["value"] == 12.0
-    assert quote["tierSourceTextCn"] is None
+    assert quote["tierSourceTextCn"] == "1-99件 12.00"
 
 
 def test_the_listing_price_counts_towards_the_span(tmp_path):

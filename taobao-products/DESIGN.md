@@ -164,6 +164,11 @@ Two constraints that do not change with the provider:
   revenue — Apify covers their platform cost but not the data-source call,
   which is ours.
 
+Bandwidth is metered too: 10,240 MB a month included, then $0.001 per MB. A
+real search page of 50 hits weighed 1.36 MB — most of it per-SKU size data —
+so about 7,500 pages a month fit in the allowance, and past it a page costs
+about $0.0014, under $0.00003 a record. Detail responses are unmeasured yet.
+
 ### Later: Taobao through OneBound
 
 OTAPI's RapidAPI listing is 1688 only. OneBound covers Taobao, Tmall and 1688

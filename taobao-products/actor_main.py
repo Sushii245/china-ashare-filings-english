@@ -283,6 +283,11 @@ def _resolve_ids(
                 len(ids),
             )
             break
+        # A page the provider did not fill is the last one; asking for the
+        # next would be a billed call for an empty page.
+        page_size = data_source.config.known_page_size
+        if page_size and len(batch) < page_size:
+            break
         page += 1
 
     return ids
@@ -446,6 +451,11 @@ async def _run_listing_mode(
         # A provider that repeats a page when results run short would otherwise
         # keep costing a call per loop.
         if fresh == 0:
+            break
+        # A page the provider did not fill is the last one; asking for the
+        # next would be a billed call for an empty page.
+        page_size = data_source.config.known_page_size
+        if page_size and len(entries) < page_size:
             break
         page += 1
 

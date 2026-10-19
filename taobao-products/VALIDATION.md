@@ -27,6 +27,23 @@ OneBound, once there is revenue to justify the prepayment.
 Validation fits inside Basic. At $0.012 a product the Pro tier leaves a 72%
 margin and pays for itself after about 2,900 products a month.
 
+## Progress
+
+- **2026-10-19 — search: done.** One call, 50 hits for `T恤 批发`. The hit list
+  is at `Result.Items.Items.Content` as the preset guessed; ids come back as
+  `abb-…`. The search map in `otapi_1688_config` is now written from it, and a
+  trimmed copy is a real fixture (`tests/fixtures/otapi-1688/`). Findings that
+  changed code: 1688's headline price is the *cheapest* rung of the ladder, so
+  quoting a small order off it understated it by up to 30% — the quote no
+  longer falls back to the headline while a ladder exists; about half the hits
+  carry their ladder in the search response, so listing mode quotes too; and a
+  search page the provider did not fill is now the last one, instead of a
+  billed call for an empty page 2. Sales: `SalesInLast30Days` is mapped;
+  `payOrder30Day` and `saleNum` disagree with both it and `TotalSales`, so they
+  are left unmapped until their meaning is known.
+- **Next — detail calls.** `BatchGetItemFullInfo` on three of those ids plus a
+  bogus one, to write the item map.
+
 ## Phase 0 — sign up (0 calls)
 
 - [ ] Subscribe to **Basic** on

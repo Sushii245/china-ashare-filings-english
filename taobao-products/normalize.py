@@ -450,7 +450,11 @@ def normalize(
         is_presale=is_presale,
         presale_ships_within_days=units.parse_presale_days(presale_text),
         shop_name_cn=_first_str(field("shop_name_cn")),
-        shop_id=_first_str(field("shop_id")),
+        shop_id=(
+            config.from_wire_id(_first_str(field("shop_id")))
+            if _first_str(field("shop_id"))
+            else None
+        ),
         shop_scores=_normalize_shop_scores(field("shop_scores")),
         skus=skus,
         sku_count=len(skus) or None,
@@ -492,37 +496,54 @@ def _sales(raw: Any, hint: dict[str, Any] | None) -> Sales | None:
 def _build_quote(product: Product, quantity: int) -> Quote:
     """Price ``quantity`` pieces against the ladder, or the flat price.
 
-    Walks the 阶梯价 steps for the one covering ``quantity``; the top step is
-    open-ended so any larger order lands there. Falls back to the listing
-    price when there is no ladder, which is the normal Taobao case.
+    On 1688 the headline price is the *cheapest* rung of the ladder — the price
+    at the largest order. So whenever a ladder exists, the quote comes from the
+    ladder and never falls back to the headline: doing that for an order below
+    the first rung, or between rungs, quoted a 2-piece order at the
+    10,000-piece price (4.3 元 a piece quoted as 3.3 on a real listing). The
+    buyer budgets off this number, and understating it is the harmful error.
     """
     quote = Quote(quantity=quantity)
+    tiers = product.price_tiers  # sorted by min_qty
 
     moq = product.min_order_quantity
     if moq is not None:
         # Below the seller's minimum the order cannot be placed as asked. The
         # price is still worth showing, so this is a flag, not a refusal.
         quote.meets_minimum_order = quantity >= moq.value
+    elif tiers:
+        # No stated minimum, but the ladder's first rung is the smallest
+        # quantity the seller prices at all.
+        quote.meets_minimum_order = quantity >= tiers[0].min_qty
 
     # A ladder should not overlap, but some do, and then there is no way to
-    # know which rung the seller means. The buyer budgets off this number, so
-    # the dearest matching rung wins: understating an order is the harmful
-    # direction to be wrong in.
+    # know which rung the seller means. The dearest matching rung wins:
+    # understating an order is the harmful direction to be wrong in.
     matching = [
         tier
-        for tier in product.price_tiers
+        for tier in tiers
         if quantity >= tier.min_qty
         and (tier.max_qty is None or quantity <= tier.max_qty)
     ]
     if matching:
-        dearest = max(matching, key=lambda t: t.unit_price.value)
-        quote.unit_price = dearest.unit_price
-        quote.tier_source_text_cn = dearest.source_text_cn
+        rung = max(matching, key=lambda t: t.unit_price.value)
+    elif tiers:
+        # No rung contains the quantity: either it is below the ladder, where
+        # the first rung is what the smallest order the seller accepts costs,
+        # or it falls in a gap, where the rung below still applies — a rung's
+        # price holds until the next one begins.
+        below = [tier for tier in tiers if tier.min_qty <= quantity]
+        rung = below[-1] if below else tiers[0]
+    else:
+        rung = None
 
-    if quote.unit_price is None and product.price is not None:
-        # A span across variants has no single unit price to quote.
-        if not product.price.is_range:
-            quote.unit_price = product.price
+    if rung is not None:
+        quote.unit_price = rung.unit_price
+        quote.tier_source_text_cn = rung.source_text_cn
+    elif product.price is not None and not product.price.is_range:
+        # No ladder at all: the flat price. A span across variants has no
+        # single unit price to quote.
+        quote.unit_price = product.price
 
     if quote.unit_price is not None:
         # Derived, so it carries no source text: the listing never printed it.
@@ -559,8 +580,12 @@ def normalize_search_entry(
     an image, so one billed call yields a whole page of usable records where
     fetching each listing in full costs a call each. The record says
     ``status: "listed"`` rather than ``ok``, because the fields a search hit
-    cannot carry — the SKU matrix, 阶梯价, shipping terms, shop scores — are
+    cannot carry — usually the SKU matrix, shipping terms, shop scores — are
     absent rather than null-because-the-listing-is-silent.
+
+    What a hit *does* carry is used, whatever it is: OTAPI's 1688 search
+    returns the wholesale ladder on about half its hits, and a ladder read for
+    free from the search page lets the cheap tier quote orders too.
     """
     config = config or SourceConfig(base_url="")
     hints = config.hints or {}
@@ -587,6 +612,12 @@ def normalize_search_entry(
         )
 
     price = units.parse_price(_scalar(field("price")))
+    stock_raw = _scalar(field("stock"))
+    stock_value = (
+        float(stock_raw) if isinstance(stock_raw, (int, float))
+        else units.parse_cn_number(stock_raw)
+    )
+    shop_id = _first_str(field("shop_id"))
     product = Product(
         item_id=item_id,
         platform=platform,  # type: ignore[arg-type]
@@ -597,8 +628,18 @@ def normalize_search_entry(
         price=price,
         original_price=units.parse_price(_scalar(field("original_price"))),
         sales=_sales(field("sales"), hints.get("sales")),
+        price_tiers=_normalize_tiers(field("tiers"), hints.get("tiers")),
+        stock=(
+            Stock(
+                value=int(stock_value),
+                is_approximate=bool((hints.get("stock") or {}).get("approximate", True)),
+                source_text_cn=stock_raw if isinstance(stock_raw, str) else None,
+            )
+            if stock_value is not None
+            else None
+        ),
         shop_name_cn=_first_str(field("shop_name_cn")),
-        shop_id=_first_str(field("shop_id")),
+        shop_id=config.from_wire_id(shop_id) if shop_id else None,
         images=_normalize_images(field("image")),
         fetched_at=now,
     )

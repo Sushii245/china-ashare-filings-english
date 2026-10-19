@@ -22,6 +22,18 @@ a real response first (VALIDATION.md).
   quantity, each closed by the next rung's start. Values in name/value lists
   are addressed by name. Facts a typed value cannot state — a sales figure's
   window, whether stock is exact — come from the data source's hints.
+- The quote never falls back to the headline price while a ladder exists. On
+  1688 the headline is the cheapest rung — the price at the largest order —
+  so quoting a 2-piece order off it understated a real listing by 30% (4.3 元
+  a piece quoted as 3.3). Below the first rung the first rung's price applies
+  and the order is flagged as under the minimum; in a gap, the rung below.
+- Listing-level records carry the wholesale ladder, stock and a quote when the
+  search result includes them, which on 1688 is about half the time.
+- A search page the data source did not fill ends the search, saving a billed
+  call per run for an empty next page. Only applied where this Actor sets the
+  page size itself.
+- A field path may name alternatives (`a|b`), used for a promotion price that
+  falls back to the regular one.
 - `titleCn` and `titleEn` are kept apart, and a title with no Chinese in it is
   never put in `titleCn`.
 - `sourceTextCn` is filled where a value was read from listing text and null

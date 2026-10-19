@@ -397,3 +397,48 @@ def test_the_chosen_interval_reaches_the_client(monkeypatch):
     monkeypatch.setenv(actor_main.ENV_API_KEY, "k")
     built = actor_main._build_source({}, "1688", actor_main._min_interval({"minRequestInterval": 0}))
     assert built.config.min_interval == 0.0
+
+
+# ------------------------------------------------------------- short pages
+
+class SizedPages:
+    """A provider that serves `total` ids, `size` to a page, and counts calls."""
+
+    def __init__(self, total: int, size: int, *, sized: bool) -> None:
+        self.config = source_mod.SourceConfig(
+            base_url="", page_size=size,
+            page_size_param="frameSize" if sized else None,
+            offset_param="framePosition" if sized else None,
+        )
+        self.ids = [str(100000000 + n) for n in range(total)]
+        self.size = size
+        self.calls = 0
+
+    def fetch_product(self, item_id):  # pragma: no cover
+        raise AssertionError("not expected")
+
+    def search(self, keyword, *, page=1):
+        self.calls += 1
+        return self.ids[(page - 1) * self.size : page * self.size]
+
+
+def test_a_short_page_ends_the_search_when_the_page_size_is_ours():
+    # 5 results at 50 a page: one call. Asking for page 2 would be a billed
+    # call for an empty page — on every run whose results fit on one page.
+    source = SizedPages(total=5, size=50, sized=True)
+    assert len(actor_main._resolve_ids({"keyword": "x"}, source, limit=100)) == 5
+    assert source.calls == 1
+
+
+def test_full_pages_keep_going():
+    source = SizedPages(total=120, size=50, sized=True)
+    assert len(actor_main._resolve_ids({"keyword": "x"}, source, limit=1000)) == 120
+    assert source.calls == 3        # 50, 50, 20 — the short third page ends it
+
+
+def test_a_short_page_is_not_trusted_when_the_provider_picks_its_size():
+    # Without a page-size parameter we do not know the page size, so a short
+    # page proves nothing and the search runs until a page comes back empty.
+    source = SizedPages(total=5, size=50, sized=False)
+    assert len(actor_main._resolve_ids({"keyword": "x"}, source, limit=100)) == 5
+    assert source.calls == 2

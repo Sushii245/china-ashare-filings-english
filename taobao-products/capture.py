@@ -82,9 +82,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
     if args.provider:
         config = source_mod.PROVIDER_PRESETS[args.provider](args.api_key)
         config.max_retries = args.retries
@@ -115,6 +112,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
     client = source_mod.UpstreamSource(config, platform=platform)
+
+    # Created only once the run is known to go ahead, so a refused run does
+    # not leave an empty capture directory that reads like a failed capture.
+    out_dir = Path(args.out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     spent = 0
     for item_id in args.item_ids:
