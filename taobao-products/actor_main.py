@@ -61,6 +61,26 @@ MAX_SEARCH_PAGES = 20
 #: politeness; `min_interval` still spaces every request globally.
 DEFAULT_CONCURRENCY = 5
 
+#: What a run started by a user on a free Apify plan may fetch. Apify pays
+#: nothing to the developer for those runs but the data-source calls are still
+#: ours, so they are capped: three listings at full detail, and at listing level
+#: fewer records than one search page holds, i.e. exactly one call. Enough to
+#: try the Actor on, too little to farm.
+FREE_PLAN_MAX_PRODUCTS = 3
+FREE_PLAN_MAX_LISTED = 20
+
+#: The environment variable Apify sets with the starting user's plan.
+ENV_USER_IS_PAYING = "APIFY_USER_IS_PAYING"
+
+#: Circuit breaker for runs whose listings mostly fail. Failed listings are not
+#: billed but each still costs a data-source call, so a run fed thousands of
+#: made-up ids would be all cost and no revenue. Trips on whichever comes
+#: first: at least BREAKER_MIN_UNBILLED failures making up more than half of
+#: what was attempted, or BREAKER_CONSECUTIVE failures in a row (which catches
+#: a long good run that turns bad, where the ratio would be slow to move).
+BREAKER_MIN_UNBILLED = 10
+BREAKER_CONSECUTIVE = 20
+
 #: Seconds between requests when the input leaves it unset. Matches the input
 #: schema default; kept here too for runs started through the API without it.
 DEFAULT_MIN_INTERVAL = 0.2
@@ -106,6 +126,37 @@ def _min_interval(actor_input: dict[str, Any]) -> float:
         return max(0.0, float(raw))
     except (TypeError, ValueError):
         return DEFAULT_MIN_INTERVAL
+
+
+def _plan_limit(
+    limit: int,
+    detail_level: str,
+    *,
+    at_home: bool,
+    plan_known: bool,
+    paying: bool,
+) -> tuple[int, bool]:
+    """Cap a run started on a free Apify plan. Returns (limit, capped).
+
+    Enforced on the platform always — a missing plan flag there counts as
+    free, so the check fails closed. Off the platform it is enforced only when
+    the flag is set explicitly, which leaves local development alone and lets
+    the end-to-end tests exercise it; the SDK reads "unset" and "free" alike,
+    so presence is the only way to tell them apart.
+    """
+    if not (at_home or plan_known) or paying:
+        return limit, False
+    cap = FREE_PLAN_MAX_LISTED if detail_level == "listing" else FREE_PLAN_MAX_PRODUCTS
+    return min(limit, cap), limit > cap
+
+
+def _breaker_reason(attempted: int, unbilled: int, consecutive: int) -> str | None:
+    """Why the run should stop fetching, or None to carry on."""
+    if consecutive >= BREAKER_CONSECUTIVE:
+        return f"{consecutive} listings in a row came back unavailable"
+    if unbilled >= BREAKER_MIN_UNBILLED and unbilled * 2 > attempted:
+        return f"{unbilled} of {attempted} listings came back unavailable"
+    return None
 
 
 def _validate_platform(platform: str) -> str:
@@ -474,6 +525,21 @@ async def main() -> None:
             await Actor.fail(status_message=str(exc))
             return
         limit = int(actor_input.get("maxProducts") or 10)
+        detail_level = (actor_input.get("detailLevel") or "full").strip()
+        limit, plan_capped = _plan_limit(
+            limit,
+            detail_level,
+            at_home=Actor.is_at_home(),
+            plan_known=os.environ.get(ENV_USER_IS_PAYING) is not None,
+            paying=Actor.configuration.user_is_paying,
+        )
+        if plan_capped:
+            Actor.log.warning(
+                "Free Apify plan: this run is limited to %d %s. A paid Apify plan "
+                "lifts the limit.",
+                limit,
+                "records" if detail_level == "listing" else "listings",
+            )
         include_skus = bool(actor_input.get("includeSkus", True))
         raw_quantity = actor_input.get("quantity")
         quantity = int(raw_quantity) if raw_quantity else None
@@ -498,7 +564,6 @@ async def main() -> None:
             await Actor.fail(status_message=str(exc))
             return
 
-        detail_level = (actor_input.get("detailLevel") or "full").strip()
         if detail_level == "listing":
             keyword = (actor_input.get("keyword") or "").strip()
             if not keyword:
@@ -523,6 +588,8 @@ async def main() -> None:
                 is_ppe=is_ppe,
             )
             parts = [f"Returned {returned} listing-level record(s)"]
+            if plan_capped:
+                parts.append(f"free Apify plan, limited to {limit}")
             if skipped:
                 parts.append(f"{skipped} unusable and not billed")
             if hit_limit:
@@ -547,6 +614,8 @@ async def main() -> None:
 
         returned = skipped = 0
         hit_charge_limit = False
+        attempted = consecutive_unbilled = 0
+        tripped: str | None = None
         charging = Actor.get_charging_manager()
         pending = list(item_ids)
         done = 0
@@ -590,6 +659,8 @@ async def main() -> None:
 
             for product in products:
                 done += 1
+                attempted += 1
+                consecutive_unbilled = 0 if product.status == "ok" else consecutive_unbilled + 1
                 Actor.log.info(
                     "[%d/%d] %s %s", done, len(item_ids), product.item_id, product.status
                 )
@@ -617,6 +688,19 @@ async def main() -> None:
             if hit_charge_limit:
                 break
 
+            # Checked between batches: a batch is the unit of fetching, so this
+            # is the earliest point at which stopping saves calls.
+            tripped = _breaker_reason(attempted, skipped, consecutive_unbilled)
+            if tripped and pending:
+                Actor.log.warning(
+                    "Stopping early: %s. Not fetching the remaining %d — check "
+                    "the ids, or whether the data source is having trouble.",
+                    tripped,
+                    len(pending),
+                )
+                break
+            tripped = None
+
         parts = [f"Returned {returned} of {len(item_ids)} listing(s)"]
         if skipped:
             parts.append(f"{skipped} unavailable and not billed")
@@ -626,6 +710,10 @@ async def main() -> None:
                 "stopped at the run's charge limit"
                 + (f", {unfetched} not fetched" if unfetched else "")
             )
+        if tripped:
+            parts.append(f"stopped early because {tripped}, {len(pending)} not fetched")
+        if plan_capped:
+            parts.append(f"free Apify plan, limited to {limit}")
         await Actor.set_status_message("; ".join(parts) + ".", is_terminal=True)
 
 

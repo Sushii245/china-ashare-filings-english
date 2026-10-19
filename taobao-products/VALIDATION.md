@@ -54,9 +54,12 @@ margin and pays for itself after about 2,900 products a month.
   Chinese label, so `aspectCn` is null; a property listed several times (seven
   `主要销售地区`) keeps every value; picture URLs sit under `Url`.
 - **Total spent on validation: 5 calls**, inside the free tier.
-- **Left before publishing:** the abuse protections (free-plan cap, failure
-  circuit breaker, a priced run start), throughput measured against real
-  latency, and the checks below.
+- **2026-10-20 — abuse protections: done** in code (free-plan cap, failure
+  circuit breaker), each with an end-to-end test that fails against the
+  unprotected code.
+- **Left before publishing:** price `apify-actor-start` in the Monetization
+  settings (no code), throughput measured against real latency, and the checks
+  below.
 
 ## Phase 0 — sign up (0 calls)
 

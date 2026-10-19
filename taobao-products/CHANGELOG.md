@@ -40,6 +40,11 @@ a real response first (VALIDATION.md).
   attributes with variant axes left out and repeated properties kept whole.
 - A promotion price is no longer mixed with the regular variant prices into a
   false price span.
+- Runs started on a free Apify plan are capped at 3 listings, or 20
+  listing-level records (one search call), since those runs earn nothing
+  while their data-source calls still cost.
+- A run stops early when its listings mostly come back unavailable: after ten
+  failures making up more than half of those tried, or twenty in a row.
 - `titleCn` and `titleEn` are kept apart, and a title with no Chinese in it is
   never put in `titleCn`.
 - `sourceTextCn` is filled where a value was read from listing text and null

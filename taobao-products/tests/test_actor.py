@@ -442,3 +442,49 @@ def test_a_short_page_is_not_trusted_when_the_provider_picks_its_size():
     source = SizedPages(total=5, size=50, sized=False)
     assert len(actor_main._resolve_ids({"keyword": "x"}, source, limit=100)) == 5
     assert source.calls == 2
+
+
+# ------------------------------------------------------------ free-plan cap
+
+@pytest.mark.parametrize(
+    "at_home,plan_known,paying,mode,given,expected",
+    [
+        # On the platform: enforced, and a missing flag counts as free.
+        (True, False, False, "full", 10, (3, True)),
+        (True, True, False, "full", 10, (3, True)),
+        (True, True, True, "full", 10, (10, False)),       # paying: untouched
+        (True, True, False, "listing", 100, (20, True)),   # one search page
+        (True, True, False, "full", 2, (2, False)),        # already under
+        # Off the platform: only when the flag is set explicitly.
+        (False, False, False, "full", 10, (10, False)),    # local development
+        (False, True, False, "full", 10, (3, True)),       # simulated free user
+        (False, True, True, "full", 10, (10, False)),
+    ],
+)
+def test_plan_limit(at_home, plan_known, paying, mode, given, expected):
+    assert actor_main._plan_limit(
+        given, mode, at_home=at_home, plan_known=plan_known, paying=paying
+    ) == expected
+
+
+def test_the_free_listing_cap_fits_in_one_search_page():
+    # The point of the listing cap is that it costs exactly one call.
+    assert actor_main.FREE_PLAN_MAX_LISTED < source_mod.otapi_1688_config("k").page_size
+
+
+# ------------------------------------------------------- failure breaker
+
+@pytest.mark.parametrize(
+    "attempted,unbilled,consecutive,trips",
+    [
+        (10, 10, 10, True),     # all bad: trips at the threshold
+        (9, 9, 9, False),       # under the minimum: not yet
+        (12, 9, 3, False),      # a few failures in a mostly good run
+        (18, 10, 4, True),      # ten failures, more than half
+        (20, 10, 10, False),    # exactly half is not more than half
+        (500, 20, 20, True),    # a long good run gone bad: the streak trips it
+        (500, 19, 19, False),
+    ],
+)
+def test_breaker_reason(attempted, unbilled, consecutive, trips):
+    assert (actor_main._breaker_reason(attempted, unbilled, consecutive) is not None) is trips

@@ -183,6 +183,32 @@ Taobao store ($3.00/1,000) nets $0.00233 a product — below that call cost — 
 those listings only work on a committed monthly plan. Revisit once 1688 revenue
 covers the prepayment; it is a preset, not a rewrite.
 
+## Who can run up the bill
+
+A billed record is always profitable, even at the data source's overage rates
+($0.0096 net against $0.005–0.008 a call), so success cannot be weaponised.
+Money is lost only on a call that earns nothing, and there are three ways to
+make one:
+
+* **Unbilled failures.** A not-found or refused listing is free to the buyer
+  but still costs a call. A run of a thousand made-up ids would be a thousand
+  calls. A circuit breaker stops a run once ten failures make up more than
+  half of what was tried, or twenty come in a row — checked between batches,
+  the earliest point at which stopping saves calls. Measured: 25 made-up ids
+  followed by 3 good ones cost 28 calls before, 10 after.
+* **Free-plan users.** Apify pays the developer nothing for their runs but
+  covers only the platform cost, not the data-source calls. Those runs are
+  capped at 3 listings, or 20 listing-level records — one search page, one
+  call. The cap is enforced on the platform always, treating a missing plan
+  flag as free; off the platform only when the flag is set explicitly, since
+  the SDK reads "unset" and "free" alike and local development must not be
+  capped.
+* **No hard cap at the data source.** RapidAPI bills overage rather than
+  suspending, so nothing upstream stops a runaway. The two guards above bound
+  the loss per run; the remaining lever is per-run revenue: price the
+  platform's built-in `apify-actor-start` event in the Monetization settings,
+  so a run that fetches nothing billable still pays something.
+
 ## Throughput
 
 *The figures below were measured against a simulated 300 ms round-trip.

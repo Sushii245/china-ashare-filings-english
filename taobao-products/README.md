@@ -145,6 +145,14 @@ cleanly at the limit.
   report an exact count. Treat it as an order of magnitude.
 - **A quote is arithmetic on published prices.** It does not include shipping,
   which most 1688 listings settle per order with the seller.
+- **Runs on a free Apify plan are limited** to 3 listings at full detail, or
+  20 records at listing level. Enough to see what the output looks like; a
+  paid Apify plan lifts the limit.
+- **A run whose listings mostly come back unavailable stops early** — after
+  ten unavailable listings making up more than half of those tried, or twenty
+  in a row — and says so in its status. Unavailable listings are never
+  billed, so this protects your run time, and usually means the ids are wrong
+  or the data source is having a bad moment.
 - **Listings are read as published.** The listing remains the authoritative
   source, which is why every record links to it.
 

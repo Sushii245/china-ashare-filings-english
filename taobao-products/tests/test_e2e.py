@@ -223,3 +223,94 @@ def test_full_detail_on_the_real_otapi_captures(tmp_path):
     assert by_id["999999999"]["status"] == "not_found"
     assert [by_id[i]["quote"]["unitPrice"]["value"] for i in ids[:3]] == [26.9, 4.3, 40.0]
     assert "Returned 3 of 4 listing(s); 1 unavailable and not billed." in run.log
+
+
+# --------------------------------------------------- abuse protections, e2e
+
+BOGUS = [str(800000000001 + n) for n in range(25)]   # pass the id check, exist nowhere
+
+
+def test_a_free_plan_run_fetches_at_most_three(tmp_path):
+    ids = [*OK_IDS, REFUSED_ID]
+    run = run_actor(
+        tmp_path, {"itemIds": ids, "platform": "1688", "maxProducts": 10},
+        APIFY_USER_IS_PAYING="0",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert sorted(run.fetched) == sorted(ids[:3])
+    assert len(run.records) == 3
+    assert "free Apify plan, limited to 3" in run.log
+
+
+def test_a_paying_run_is_not_capped(tmp_path):
+    ids = [*OK_IDS, REFUSED_ID]
+    run = run_actor(
+        tmp_path, {"itemIds": ids, "platform": "1688", "maxProducts": 10},
+        APIFY_USER_IS_PAYING="1",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert sorted(run.fetched) == sorted(ids)
+    assert "free Apify plan" not in run.log
+
+
+def full_search_page(directory: Path) -> Path:
+    """A 50-hit search page built from the real capture's five hits.
+
+    The real fixture is trimmed to five hits, too few for a 20-record cap to
+    bite; the hits are repeated under fresh ids to fill one provider page, so
+    nothing about their structure is invented.
+    """
+    real = json.loads((FIXTURES / "otapi-1688" / "_search.json").read_text(encoding="utf-8"))
+    hits = real["payload"]["Result"]["Items"]["Items"]["Content"]
+    page = []
+    for n in range(50):
+        hit = json.loads(json.dumps(hits[n % len(hits)]))
+        hit["Id"] = f"abb-{700000000000 + n}"
+        page.append(hit)
+    real["payload"]["Result"]["Items"]["Items"]["Content"] = page
+    directory.mkdir()
+    (directory / "_search.json").write_text(json.dumps(real, ensure_ascii=False), encoding="utf-8")
+    return directory
+
+
+def test_a_free_plan_listing_run_costs_one_call(tmp_path):
+    # A full page of 50 and a request for 100: uncapped, that is 50 records and
+    # a second page; a free plan gets 20 records from the first page, one call.
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "detailLevel": "listing", "platform": "1688", "maxProducts": 100},
+        APIFY_USER_IS_PAYING="0",
+        ACTOR_SOURCE_FIXTURES=str(full_search_page(tmp_path / "page")),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.searched_pages == [1]
+    assert len(run.records) == 20
+    assert "free Apify plan, limited to 20" in run.log
+
+
+def test_a_run_of_made_up_ids_is_stopped_by_the_breaker(tmp_path):
+    # 25 ids that exist nowhere, then three good ones. Unbilled, each still
+    # costs a data-source call; the breaker stops after the second batch of
+    # five, so the rest — good ones included — are never fetched.
+    ids = [*BOGUS, *OK_IDS]
+    run = run_actor(
+        tmp_path,
+        {"itemIds": ids, "platform": "1688", "maxProducts": 50, "concurrency": 5},
+    )
+    assert run.proc.returncode == 0, run.log
+    assert len(run.fetched) == 10, run.fetched
+    assert set(run.fetched) <= set(BOGUS)
+    assert {r["status"] for r in run.records} == {"not_found"}
+    assert "stopped early because 10 of 10 listings came back unavailable, 18 not fetched" in run.log
+
+
+def test_a_few_failures_do_not_trip_the_breaker(tmp_path):
+    ids = [*OK_IDS, *BOGUS[:9]]
+    run = run_actor(
+        tmp_path,
+        {"itemIds": ids, "platform": "1688", "maxProducts": 50, "concurrency": 5},
+    )
+    assert run.proc.returncode == 0, run.log
+    assert sorted(run.fetched) == sorted(ids)
+    assert "stopped early" not in run.log
