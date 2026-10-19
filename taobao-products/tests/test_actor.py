@@ -106,23 +106,112 @@ def test_keyword_search_stops_when_a_page_is_empty():
 def test_missing_provider_fails_with_an_actionable_message(monkeypatch):
     import source as source_mod
 
-    monkeypatch.delenv(actor_main.ENV_FIXTURES, raising=False)
-    monkeypatch.delenv(actor_main.ENV_BASE_URL, raising=False)
-    monkeypatch.delenv(actor_main.ENV_API_KEY, raising=False)
+    for var in (actor_main.ENV_FIXTURES, actor_main.ENV_BASE_URL,
+                actor_main.ENV_API_KEY, actor_main.ENV_PROVIDER):
+        monkeypatch.delenv(var, raising=False)
     with pytest.raises(source_mod.SourceError) as caught:
-        actor_main._build_source({}, "taobao", 1.0)
-    assert "SOURCE_BASE_URL" in str(caught.value)
+        actor_main._build_source({}, "1688", 1.0)
+    assert "SOURCE_PROVIDER" in str(caught.value)
+    assert "SOURCE_API_KEY" in str(caught.value)
 
 
-def test_1688_platform_selects_its_own_endpoints(monkeypatch):
+def test_the_operator_preset_is_built_with_the_operator_key(monkeypatch):
     monkeypatch.delenv(actor_main.ENV_FIXTURES, raising=False)
-    built = actor_main._build_source(
-        {"sourceBaseUrl": "https://provider.example", "sourceApiKey": "k"},
-        "1688",
-        1.0,
-    )
-    assert built.config.detail_path == "/1688/item_get"
+    monkeypatch.setenv(actor_main.ENV_PROVIDER, "otapi-1688")
+    monkeypatch.setenv(actor_main.ENV_API_KEY, "operator-key")
+    built = actor_main._build_source({}, "1688", 0.5)
+    assert built.config.detail_path == "/BatchGetItemFullInfo"
+    assert built.session.headers["X-RapidAPI-Key"] == "operator-key"
+    assert built.config.min_interval == 0.5
     assert built.platform == "1688"
+
+
+def test_a_buyer_key_is_used_with_the_operator_preset(monkeypatch):
+    monkeypatch.delenv(actor_main.ENV_FIXTURES, raising=False)
+    monkeypatch.setenv(actor_main.ENV_PROVIDER, "otapi-1688")
+    monkeypatch.setenv(actor_main.ENV_API_KEY, "operator-key")
+    built = actor_main._build_source({"sourceApiKey": "buyer-key"}, "1688", 0.5)
+    assert built.session.headers["X-RapidAPI-Key"] == "buyer-key"
+
+
+def test_a_preset_without_any_key_fails_clearly(monkeypatch):
+    import source as source_mod
+
+    monkeypatch.delenv(actor_main.ENV_FIXTURES, raising=False)
+    monkeypatch.delenv(actor_main.ENV_API_KEY, raising=False)
+    monkeypatch.setenv(actor_main.ENV_PROVIDER, "otapi-1688")
+    with pytest.raises(source_mod.SourceError) as caught:
+        actor_main._build_source({}, "1688", 0.5)
+    assert "no key" in str(caught.value)
+
+
+def test_an_unknown_provider_name_lists_the_known_ones(monkeypatch):
+    import source as source_mod
+
+    monkeypatch.delenv(actor_main.ENV_FIXTURES, raising=False)
+    monkeypatch.setenv(actor_main.ENV_PROVIDER, "nope")
+    monkeypatch.setenv(actor_main.ENV_API_KEY, "k")
+    with pytest.raises(source_mod.SourceError) as caught:
+        actor_main._build_source({}, "1688", 0.5)
+    assert "otapi-1688" in str(caught.value)
+
+
+def test_fixtures_replay_through_the_named_preset(monkeypatch, tmp_path):
+    # Phase 5 of VALIDATION.md: a capture must be read exactly as live data
+    # would be, or the replay proves nothing.
+    monkeypatch.setenv(actor_main.ENV_FIXTURES, str(tmp_path))
+    monkeypatch.setenv(actor_main.ENV_PROVIDER, "otapi-1688")
+    built = actor_main._build_source({}, "1688", 0.5)
+    assert isinstance(built, source_mod.FixtureSource)
+    assert built.config.id_prefix == "abb-"
+    assert built.config.platforms == ("1688",)
+
+
+def test_a_platform_the_provider_does_not_serve_is_refused(monkeypatch):
+    monkeypatch.delenv(actor_main.ENV_FIXTURES, raising=False)
+    monkeypatch.setenv(actor_main.ENV_PROVIDER, "otapi-1688")
+    monkeypatch.setenv(actor_main.ENV_API_KEY, "k")
+    built = actor_main._build_source({}, "taobao", 0.5)
+    with pytest.raises(ValueError) as caught:
+        actor_main._check_platform_served("taobao", built)
+    assert "1688 only" in str(caught.value)
+    actor_main._check_platform_served("1688", built)   # does not raise
+
+
+@pytest.mark.parametrize(
+    "given,expected",
+    [("abb-612345678901", "612345678901"), (" abb-612345678901 ", "612345678901")],
+)
+def test_a_pasted_wire_id_is_read_as_the_platform_id(given, expected):
+    source = PageIgnoringSource([])
+    assert actor_main._resolve_ids({"itemIds": [given]}, source, limit=5) == [expected]
+
+
+def test_the_chunk_normalises_with_the_sources_own_map():
+    # Regression: _fetch_chunk called normalize() without the source's config,
+    # so every source was read with the default query-string map and a new
+    # provider's records all came back unparsable.
+    class StructuredSource(CountingSource):
+        def __init__(self):
+            super().__init__()
+            self.config = source_mod.SourceConfig(
+                base_url="", id_prefix="abb-",
+                field_map={"title_cn": "R.T", "price": "R.P"},
+            )
+
+        def fetch_product(self, item_id):
+            return source_mod.RawProduct(
+                item_id=item_id, platform="1688",
+                payload={"R": {"T": "直线导轨滑块", "P": 38.5}},
+            )
+
+    [product] = actor_main._fetch_chunk(
+        StructuredSource(), ["abb-123456789"], quantity=None, workers=1, platform="1688"
+    )
+    assert product.status == "ok"
+    assert product.title_cn == "直线导轨滑块"
+    assert product.price.value == 38.5
+    assert product.item_id == "123456789"
 
 
 class PageIgnoringSource:
@@ -133,6 +222,7 @@ class PageIgnoringSource:
     """
 
     def __init__(self, ids: list[str]) -> None:
+        self.config = source_mod.SourceConfig(base_url="")
         self._ids = ids
         self.calls = 0
 
@@ -156,6 +246,7 @@ class CountingSource:
     """Records the order it was asked in, and can be told to fail on an id."""
 
     def __init__(self, fail: set[str] | None = None) -> None:
+        self.config = source_mod.SourceConfig(base_url="")
         self.asked: list[str] = []
         self.fail = fail or set()
         self._lock = threading.Lock()

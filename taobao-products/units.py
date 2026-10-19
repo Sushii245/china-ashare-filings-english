@@ -161,7 +161,7 @@ _UNIT_MARKERS: tuple[tuple[str, SalesUnit], ...] = (
 )
 
 
-def parse_sales(value: str | None) -> Sales | None:
+def parse_sales(value: str | float | int | None) -> Sales | None:
     """Parse a sales figure together with what it measures.
 
     ``"月销1000+"``   -> 1000, monthly, approximate
@@ -169,6 +169,15 @@ def parse_sales(value: str | None) -> Sales | None:
     ``"100+人付款"``  -> 100, buyers, approximate
     ``"成交1203笔"``  -> 1203, orders, exact
     """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        # A typed number states no window, no unit and no floor, and quotes no
+        # listing text — so none of those are claimed. The provider's hints
+        # supply the window where its field name implies one.
+        if value < 0:
+            return None
+        return Sales(count=int(value), is_approximate=False)
     raw = (value or "").strip()
     text = normalize_text(raw)
     if not text:

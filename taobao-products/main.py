@@ -25,9 +25,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("item_ids", nargs="*", help="listing ids to fetch")
     parser.add_argument("--fixtures", help="directory of recorded payloads")
+    parser.add_argument(
+        "--provider", choices=sorted(source_mod.PROVIDER_PRESETS),
+        default=os.environ.get("SOURCE_PROVIDER") or None,
+        help="a built-in provider preset; with --fixtures, replays through its maps",
+    )
     parser.add_argument("--base-url", default=os.environ.get("SOURCE_BASE_URL"))
     parser.add_argument("--api-key", default=os.environ.get("SOURCE_API_KEY"))
-    parser.add_argument("--platform", default="taobao", choices=("taobao", "tmall", "1688"))
+    parser.add_argument(
+        "--platform", choices=("taobao", "tmall", "1688"),
+        help="defaults to the provider's own platform; taobao without --provider",
+    )
     parser.add_argument("--keyword", help="search instead of naming ids")
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument(
@@ -42,19 +50,39 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
+    preset = (
+        source_mod.PROVIDER_PRESETS[args.provider](args.api_key or "")
+        if args.provider
+        else None
+    )
+    platform = args.platform or (preset.platforms[0] if preset else "taobao")
+
     if args.fixtures:
         data_source: source_mod.ProductSource = source_mod.FixtureSource(
-            args.fixtures, platform=args.platform
+            args.fixtures, platform=platform, config=preset
         )
+    elif preset is not None:
+        if not args.api_key:
+            print(f"--provider {args.provider} needs --api-key", file=sys.stderr)
+            return 2
+        data_source = source_mod.UpstreamSource(preset, platform=platform)
     elif args.base_url:
         data_source = source_mod.UpstreamSource(
             source_mod.SourceConfig(base_url=args.base_url, api_key=args.api_key),
-            platform=args.platform,
+            platform=platform,
         )
     else:
         print(
-            "no data source: pass --fixtures, or --base-url and --api-key for "
-            "your product data provider",
+            "no data source: pass --fixtures, --provider with --api-key, or "
+            "--base-url with --api-key",
+            file=sys.stderr,
+        )
+        return 2
+
+    if platform not in data_source.config.platforms:
+        print(
+            f"this data source serves {', '.join(data_source.config.platforms)}, "
+            f"not {platform}",
             file=sys.stderr,
         )
         return 2
@@ -73,7 +101,9 @@ def main(argv: list[str] | None = None) -> int:
     records = []
     for item_id in item_ids:
         product = normalize_mod.normalize(
-            data_source.fetch_product(item_id), quantity=args.quantity
+            data_source.fetch_product(item_id),
+            config=data_source.config,
+            quantity=args.quantity,
         )
         logging.info("%s -> %s", item_id, product.status)
         records.append(product.to_item())

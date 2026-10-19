@@ -11,6 +11,12 @@ Switching provider is a :class:`SourceConfig` change — base URL, key, endpoint
 paths and a field map — not a rewrite, because everything downstream works on
 the provider-neutral shape that :func:`UpstreamSource.fetch_product` returns.
 
+Everything provider-specific lives on :class:`SourceConfig` and travels with
+the source: the field maps, where a search response keeps its hits, how errors
+are reported, which platforms are served and how ids are written on the wire.
+The normaliser reads all of it from ``source.config``; nothing downstream may
+assume one provider's shape.
+
 What this module deliberately does not do: sign requests, carry a login
 session, or answer a captcha. When upstream reports that risk control refused a
 request, that becomes a ``risk_control_blocked`` status on the record. The
@@ -49,6 +55,12 @@ class RiskControlBlocked(SourceError):
 #: Markers that mean the platform's risk control answered instead of the
 #: catalogue. ``RGV587`` is Alibaba's rejection code; ``baxia`` and ``punish``
 #: are the interstitials it serves; ``cloud_ip_bl`` is the datacentre-IP block.
+#:
+#: These are only ever matched against a non-JSON body or against a JSON
+#: response's *error* fields — never against a whole product record. 滑块 is
+#: also a large 1688 category (直线导轨滑块, linear-guide sliders), and an
+#: English description can say "punish"; scanning the full body classed real
+#: listings as refusals.
 _BLOCK_MARKERS = (
     "RGV587",
     "baxia",
@@ -122,6 +134,43 @@ class SourceConfig:
     #: Seconds for the first retry; doubles per attempt. Zero in tests.
     backoff_base: float = 1.0
     timeout: float = 30.0
+    #: Platforms this provider actually serves. A run asking for anything else
+    #: fails up front rather than spending calls on certain misses.
+    platforms: tuple[str, ...] = ("taobao", "tmall", "1688")
+    #: Prefix the provider puts on ids, e.g. OTAPI writes a 1688 offer as
+    #: "abb-612345678901". Added before a call, stripped from what comes back,
+    #: so the buyer only ever sees and types the platform's own id.
+    id_prefix: str = ""
+    #: Where an in-body error is reported, and the codes that mean success.
+    #: Codes are compared case-insensitively, and an all-zero code ("0000")
+    #: counts as success.
+    error_code_paths: tuple[str, ...] = ("error_code",)
+    error_message_paths: tuple[str, ...] = ("error",)
+    ok_codes: tuple[str, ...] = ("ok", "success")
+    #: Candidate locations of the hit list in a search response, tried in
+    #: order; the first that resolves to a list (or a single dict) wins.
+    search_items_paths: tuple[str, ...] = ("items.item", "items")
+    #: Keys a search hit may carry its id under.
+    search_id_keys: tuple[str, ...] = ("num_iid", "item_id", "id")
+    #: Per-field facts the data cannot state for itself, e.g. that a mapped
+    #: sales number is a 30-day figure, that stock is exact, or which keys
+    #: inside a ladder rung hold the quantity and the price.
+    hints: dict[str, dict[str, Any]] = dataclasses.field(
+        default_factory=lambda: {"stock": {"approximate": True}}
+    )
+    search_field_map: dict[str, str] = dataclasses.field(
+        default_factory=lambda: {
+            "item_id": "num_iid",
+            "title_cn": "title",
+            "price": "price",
+            "original_price": "orginal_price",
+            "sales": "sales",
+            "shop_name_cn": "nick",
+            "shop_id": "seller_id",
+            "ships_from": "location",
+            "image": "pic_url",
+        }
+    )
     field_map: dict[str, str] = dataclasses.field(
         default_factory=lambda: {
             "item_id": "item.num_iid",
@@ -149,8 +198,50 @@ class SourceConfig:
     )
 
 
+    def to_wire_id(self, item_id: str) -> str:
+        """The id as the provider wants it on a request."""
+        if self.id_prefix and not item_id.startswith(self.id_prefix):
+            return self.id_prefix + item_id
+        return item_id
+
+    def from_wire_id(self, wire_id: str) -> str:
+        """The id as the platform writes it, for the record and the URL."""
+        if self.id_prefix and wire_id.startswith(self.id_prefix):
+            return wire_id[len(self.id_prefix):]
+        return wire_id
+
+    def in_body_error(self, payload: Any) -> str | None:
+        """The provider's own error, if the 200 body carries one.
+
+        The success code in this space is often truthy — "Ok", or a string of
+        zeros — so it has to be recognised by name, not by truthiness.
+        """
+        if not isinstance(payload, dict):
+            return None
+        code = None
+        for path in self.error_code_paths:
+            value = dig(payload, path)
+            if value not in (None, ""):
+                code = str(value).strip()
+                break
+        if code is not None:
+            if code.strip("0") == "" or code.lower() in {c.lower() for c in self.ok_codes}:
+                code = None
+        message = None
+        for path in self.error_message_paths:
+            value = dig(payload, path)
+            if value not in (None, ""):
+                message = str(value).strip()
+                break
+        if code and message:
+            return f"{code}: {message}"
+        return code or message
+
+
 class ProductSource(Protocol):
     """What the pipeline needs from a data source."""
+
+    config: SourceConfig
 
     def fetch_product(self, item_id: str) -> RawProduct: ...
 
@@ -159,8 +250,17 @@ class ProductSource(Protocol):
     def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]: ...
 
 
+_PATH_PART = re.compile(r"([^\[\]]*)((?:\[[^\]]*\])*)")
+_SELECTOR = re.compile(r"\[([^\]]*)\]")
+
+
 def dig(payload: Any, path: str) -> Any:
-    """Follow a dotted path with optional list indices into nested JSON.
+    """Follow a dotted path into nested JSON.
+
+    ``a.b[0].c`` indexes a list. ``a[Name=TotalSales].Value`` picks the first
+    dict in a list whose ``Name`` equals ``TotalSales`` — the shape providers
+    use for name/value property lists, which a positional index cannot address
+    because the order is not stable.
 
     Returns ``None`` for any missing link rather than raising, because a
     provider leaving a field out is normal and must not fail the item.
@@ -169,24 +269,41 @@ def dig(payload: Any, path: str) -> Any:
     for part in path.split("."):
         if current is None:
             return None
-        match = re.fullmatch(r"([^\[\]]*)((?:\[\d+\])*)", part)
+        match = _PATH_PART.fullmatch(part)
         if not match:
             return None
-        name, indices = match.group(1), match.group(2)
+        name, selectors = match.group(1), match.group(2)
         if name:
             if not isinstance(current, dict):
                 return None
             current = current.get(name)
-        for index in re.findall(r"\[(\d+)\]", indices):
+        for selector in _SELECTOR.findall(selectors):
             if not isinstance(current, (list, tuple)):
                 return None
-            position = int(index)
-            current = current[position] if position < len(current) else None
+            if "=" in selector:
+                key, _, wanted = selector.partition("=")
+                current = next(
+                    (
+                        entry
+                        for entry in current
+                        if isinstance(entry, dict) and str(entry.get(key)) == wanted
+                    ),
+                    None,
+                )
+            elif selector.isdigit():
+                position = int(selector)
+                current = current[position] if position < len(current) else None
+            else:
+                return None
     return current
 
 
 def looks_blocked(text: str) -> str | None:
-    """Return the risk-control marker found in ``text``, if any."""
+    """Return the risk-control marker found in ``text``, if any.
+
+    Only call this on text that is not a product record: a non-JSON body, or
+    a JSON response's error fields. See ``_BLOCK_MARKERS``.
+    """
     for marker in _BLOCK_MARKERS:
         if marker in text:
             return marker
@@ -202,12 +319,26 @@ class FixtureSource:
     upstream credential exists.
     """
 
-    def __init__(self, directory: str | Path, *, platform: str = "taobao") -> None:
+    def __init__(
+        self,
+        directory: str | Path,
+        *,
+        platform: str = "taobao",
+        config: SourceConfig | None = None,
+    ) -> None:
         self.directory = Path(directory)
         self.platform = platform
+        # Replaying a provider's capture needs that provider's maps, or every
+        # record reads as unparsable. Defaults to the query-string shape the
+        # handwritten fixtures use.
+        self.config = config or SourceConfig(base_url="")
 
     def fetch_product(self, item_id: str) -> RawProduct:
         path = self.directory / f"{item_id}.json"
+        if not path.exists():
+            wire = self.directory / f"{self.config.to_wire_id(item_id)}.json"
+            if wire.exists():
+                path = wire
         if not path.exists():
             return RawProduct(
                 item_id=item_id,
@@ -229,7 +360,7 @@ class FixtureSource:
 
     def search(self, keyword: str, *, page: int = 1) -> list[str]:
         """Fixture search returns every recorded id, ignoring the keyword."""
-        return [str(e.get("num_iid")) for e in self.search_raw(keyword, page=page)]
+        return _ids_from_hits(self.search_raw(keyword, page=page), self.config)
 
     def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]:
         """Replay a recorded search page, or synthesise one from the payloads.
@@ -243,6 +374,10 @@ class FixtureSource:
         recorded = self.directory / "_search.json"
         if recorded.exists():
             data = json.loads(recorded.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and "payload" in data:
+                # A raw response saved by capture.py: read it exactly the way
+                # the live client would.
+                return _hits_from_search_payload(data["payload"], self.config)
             entries = data.get("items") or data.get("entries") or []
             if entries:
                 return [e for e in entries if isinstance(e, dict)]
@@ -326,9 +461,10 @@ class UpstreamSource:
         params.update({k: v for k, v in extra.items() if v is not None})
         return params
 
-    def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _get(self, path: str, params: dict[str, Any]) -> Any:
         url = self.config.base_url.rstrip("/") + path
         last_error: Exception | None = None
+        body: str | None = None
         for attempt in range(self.config.max_retries + 1):
             self._throttle()
             try:
@@ -339,14 +475,7 @@ class UpstreamSource:
                     raise SourceError(f"HTTP {response.status_code} from {path}")
                 response.raise_for_status()
                 body = response.text
-                marker = looks_blocked(body)
-                if marker:
-                    raise RiskControlBlocked(marker)
-                return response.json()
-            except RiskControlBlocked:
-                raise
-            except json.JSONDecodeError as exc:
-                raise SourceError(f"{path} returned non-JSON: {exc}") from exc
+                break
             except (requests.RequestException, SourceError) as exc:
                 last_error = exc
                 if attempt == self.config.max_retries:
@@ -361,13 +490,32 @@ class UpstreamSource:
                     self.config.max_retries,
                 )
                 time.sleep(backoff)
-        raise SourceError(f"GET {path} failed after retries: {last_error}")
+        if body is None:
+            raise SourceError(f"GET {path} failed after retries: {last_error}")
+
+        # Parsing happens outside the retry loop on purpose: a body that is not
+        # JSON will not become JSON on a second billed call.
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError as exc:
+            # A non-JSON body is not a product record, so it is safe to scan
+            # for the platform's interstitial markers.
+            marker = looks_blocked(body)
+            if marker:
+                raise RiskControlBlocked(marker) from exc
+            raise SourceError(f"{path} returned non-JSON: {exc}") from exc
 
     # --------------------------------------------------------------------- api
 
     def fetch_product(self, item_id: str) -> RawProduct:
-        """Fetch one listing. Refusals become a status, not an exception."""
-        params = self._params(**{self.config.item_id_param: item_id})
+        """Fetch one listing. Refusals become a status, not an exception.
+
+        ``item_id`` is the platform's own id; the provider prefix, if any, is
+        added here and nowhere else.
+        """
+        params = self._params(
+            **{self.config.item_id_param: self.config.to_wire_id(item_id)}
+        )
         try:
             payload = self._get(self.config.detail_path, params)
         except RiskControlBlocked as exc:
@@ -387,24 +535,52 @@ class UpstreamSource:
                 status_detail=str(exc),
             )
 
-        # Providers in this space report their own errors inside a 200 body,
-        # and the success code is itself a string of zeros ("0000"), which is
-        # truthy. Testing the field for truth would call every good response an
-        # error, so the sentinel values have to be named.
-        error = payload.get("error")
-        code = payload.get("error_code")
-        if code is not None and str(code).strip("0") == "":
-            code = None
-        error = error or code
-        if error and not dig(payload, self.config.field_map["title_cn"]):
-            blocked = looks_blocked(json.dumps(payload, ensure_ascii=False))
+        if not isinstance(payload, dict):
+            return RawProduct(
+                item_id=item_id,
+                platform=self.platform,
+                payload=None,
+                status="upstream_error",
+                status_detail=f"expected a JSON object, got {type(payload).__name__}",
+            )
+
+        # A record whose title resolves is a product, full stop — even beside a
+        # warning code, since some providers attach notices to good responses.
+        # And a product's text is never scanned for risk-control markers: 滑块
+        # is a large 1688 category and "punish" turns up in descriptions.
+        title_path = self.config.field_map.get("title_cn")
+        if title_path and dig(payload, title_path):
+            return RawProduct(item_id=item_id, platform=self.platform, payload=payload)
+
+        error = self.config.in_body_error(payload)
+        # Only when the map *expects* a title and none came back is the body
+        # known not to be a listing, and so safe to scan whole: a platform
+        # refusal relayed in some field like `ret` or `msg` is caught there.
+        # With no map yet (a provider still being validated) there is no way
+        # to tell a refusal from a listing, so only the error fields count.
+        if title_path:
+            marker = looks_blocked(json.dumps(payload, ensure_ascii=False))
+        else:
+            marker = looks_blocked(error) if error else None
+        if marker:
             return RawProduct(
                 item_id=item_id,
                 platform=self.platform,
                 payload=payload,
-                status="risk_control_blocked" if blocked else "upstream_error",
-                status_detail=str(error),
+                status="risk_control_blocked",
+                status_detail=f"upstream reported {marker}" + (f" ({error})" if error else ""),
             )
+        if error:
+            squashed = error.lower().replace(" ", "").replace("-", "").replace("_", "")
+            return RawProduct(
+                item_id=item_id,
+                platform=self.platform,
+                payload=payload,
+                status="not_found" if "notfound" in squashed else "upstream_error",
+                status_detail=error,
+            )
+        # No title and no error: hand it on, and the normaliser will mark it
+        # unparsable with a note that the field map may not fit.
         return RawProduct(item_id=item_id, platform=self.platform, payload=payload)
 
     def _paging_params(self, page: int) -> dict[str, Any]:
@@ -424,13 +600,20 @@ class UpstreamSource:
         return {self.config.page_param: page}
 
     def search(self, keyword: str, *, page: int = 1) -> list[str]:
-        """Return item ids for one page of results."""
-        ids: list[str] = []
-        for entry in self.search_raw(keyword, page=page):
-            raw_id = entry.get("num_iid") or entry.get("item_id") or entry.get("id")
-            if raw_id:
-                ids.append(str(raw_id))
-        return ids
+        """Return platform item ids for one page of results."""
+        return _ids_from_hits(self.search_raw(keyword, page=page), self.config)
+
+    def search_response(self, keyword: str, *, page: int = 1) -> Any:
+        """One page of search, exactly as the provider returned it.
+
+        ``capture.py`` saves this rather than the parsed hits: the first
+        search against a new provider is the call that shows where its hits
+        live, and keeping only the ids would throw that answer away.
+        """
+        params = self._params(
+            **{self.config.keyword_param: keyword, **self._paging_params(page)}
+        )
+        return self._get(self.config.search_path, params)
 
     def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]:
         """One page of search results, as the provider returned them.
@@ -439,55 +622,100 @@ class UpstreamSource:
         hit. Listing mode sells those directly: one billed call yields a whole
         page of records, where fetching each listing in full is one call each.
         """
-        params = self._params(
-            **{self.config.keyword_param: keyword, **self._paging_params(page)}
+        return _hits_from_search_payload(
+            self.search_response(keyword, page=page), self.config
         )
-        payload = self._get(self.config.search_path, params)
-        # Explicitly None, not falsy: an empty result page is a list, and
-        # treating it as "field missing" falls through to the container above
-        # it and yields one garbage hit. In listing mode that hit looks like
-        # progress, so pagination keeps going and keeps billing.
-        items = dig(payload, "items.item")
+
+
+def _hits_from_search_payload(payload: Any, config: SourceConfig) -> list[dict[str, Any]]:
+    """Find the hit list in a search response, per the provider's config.
+
+    Each candidate path is tested for *presence*, not truth: an empty result
+    page is an empty list, and treating it as "field missing" falls through to
+    the container above it and yields one garbage hit. In listing mode that
+    hit looks like progress, so pagination keeps going and keeps billing.
+    """
+    for path in config.search_items_paths:
+        items = dig(payload, path)
         if items is None:
-            items = dig(payload, "items")
-        if items is None:
-            return []
+            continue
         if isinstance(items, dict):
             items = [items]
         if not isinstance(items, list):
-            return []
+            continue
         return [entry for entry in items if isinstance(entry, dict)]
+    return []
+
+
+def _ids_from_hits(hits: list[dict[str, Any]], config: SourceConfig) -> list[str]:
+    """Platform ids from search hits, with the provider prefix removed."""
+    ids: list[str] = []
+    for entry in hits:
+        for key in config.search_id_keys:
+            raw_id = entry.get(key)
+            if raw_id not in (None, ""):
+                ids.append(config.from_wire_id(str(raw_id)))
+                break
+    return ids
+
+
+#: Every OTAPI host serves exactly one platform; this one is 1688.
+OTAPI_1688_HOST = "otapi-1688.p.rapidapi.com"
 
 
 def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
     """Preset for the RapidAPI-fronted OTAPI 1688 service.
 
-    Differs from a query-string provider in three ways that each break a call
-    silently rather than loudly: the credentials are headers, the paging is a
-    zero-based item offset under ``framePosition``, and ``language`` is
-    required on every request.
+    Confirmed from the provider's own request samples (2026-10-19):
 
-    The field map is left empty on purpose. It is written from a real response
-    via ``capture.py`` and ``audit.py``; guessing it would only produce fields
-    that read as present and are not.
+    * ``GET /BatchGetItemFullInfo?language=en&itemId=abb-1243920753``
+    * ``GET /BatchSearchItemsFrame?language=en&framePosition=0&frameSize=50&ItemTitle=…``
+    * credentials in ``x-rapidapi-key`` / ``x-rapidapi-host`` headers;
+    * 1688 ids carry an ``abb-`` prefix on the wire (categories too:
+      ``CategoryId=abb-156``).
+
+    Each of those breaks a call silently when wrong — a display name used as a
+    path 404s, a page number sent as ``framePosition`` returns the second item
+    onwards, a bare offer id is a miss — so they are fixed here once.
+
+    Deliberately *not* filled in: the item and search field maps. No sample
+    response is published, and guessing them would manufacture fields that
+    read as present and are not; ``capture.py`` + ``audit.py`` write them from
+    a real response. The error and hit-list paths below are OTAPI's documented
+    conventions offered as candidates — each is only used if it resolves.
     """
-    host = "otapi-1688.p.rapidapi.com"
     return SourceConfig(
-        base_url=f"https://{host}",
+        base_url=f"https://{OTAPI_1688_HOST}",
         api_key=None,
-        auth_headers={"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": host},
-        detail_path="/Get item",
-        search_path="/Search for items",
+        auth_headers={"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": OTAPI_1688_HOST},
+        detail_path="/BatchGetItemFullInfo",
+        search_path="/BatchSearchItemsFrame",
         item_id_param="itemId",
         keyword_param="ItemTitle",
         offset_param="framePosition",
         page_size_param="frameSize",
         page_size=page_size,
         required_params={"language": "en"},
-        # RapidAPI's listed latency for this API is ~2.5s, so the spacing can
-        # be small: the round-trip is the limit, not the rate.
+        platforms=("1688",),
+        id_prefix="abb-",
+        error_code_paths=("ErrorCode", "error_code"),
+        error_message_paths=("ErrorDescription", "ErrorMessage", "error"),
+        ok_codes=("ok", "success"),
+        search_items_paths=(
+            "Result.Items.Items.Content",
+            "Result.Items.Content",
+            "Items.Items.Content",
+            "Items.Content",
+        ),
+        search_id_keys=("Id", "id", "ItemId"),
+        # Unknown until audited. Stock stays flagged approximate until a real
+        # response says otherwise — claiming less precision is the safe error.
+        hints={"stock": {"approximate": True}},
+        # RapidAPI lists this API's latency at ~2.5s, so the spacing can be
+        # small: the round-trip is the limit, not the rate.
         min_interval=0.1,
         field_map={},
+        search_field_map={},
     )
 
 
@@ -503,7 +731,7 @@ def build_source(
 ) -> ProductSource:
     """Pick an adapter. Fixtures win, so tests never reach the network."""
     if fixtures_dir:
-        return FixtureSource(fixtures_dir, platform=platform)
+        return FixtureSource(fixtures_dir, platform=platform, config=config)
     if config and config.base_url:
         return UpstreamSource(config, platform=platform)
     raise SourceError(

@@ -42,7 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key", default=os.environ.get("SOURCE_API_KEY"))
     parser.add_argument("--api-secret", default=os.environ.get("SOURCE_API_SECRET"))
     parser.add_argument(
-        "--platform", default="taobao", choices=("taobao", "tmall", "1688")
+        "--platform", choices=("taobao", "tmall", "1688"),
+        help="defaults to the provider's own platform; taobao without --provider",
     )
     parser.add_argument("--detail-path", help="override the detail endpoint path")
     parser.add_argument(
@@ -96,14 +97,24 @@ def main(argv: list[str] | None = None) -> int:
             lang=args.lang,
             max_retries=args.retries,
         )
-        if args.platform == "1688":
+        if (args.platform or "taobao") == "1688":
             config.detail_path = "/1688/item_get"
             config.search_path = "/1688/item_search"
     config.min_interval = 1.0      # unhurried: this is a one-off, not a run
     if args.detail_path:
         config.detail_path = args.detail_path
 
-    client = source_mod.UpstreamSource(config, platform=args.platform)
+    # A capture labelled with the wrong platform replays with the wrong URLs,
+    # so the provider's own platform is the default, and a mismatch is refused.
+    platform = args.platform or (config.platforms[0] if args.provider else "taobao")
+    if platform not in config.platforms:
+        print(
+            f"{args.provider or 'this provider'} serves {', '.join(config.platforms)}, "
+            f"not {platform}",
+            file=sys.stderr,
+        )
+        return 2
+    client = source_mod.UpstreamSource(config, platform=platform)
 
     spent = 0
     for item_id in args.item_ids:
@@ -133,20 +144,46 @@ def main(argv: list[str] | None = None) -> int:
         LOG.info("%s -> %s (%s)", item_id, target.name, raw.status)
 
     if args.search:
-        try:
-            ids = client.search(args.search)
-            spent += 1
-            target = out_dir / "_search.json"
-            target.write_text(
-                json.dumps(
-                    {"keyword": args.search, "ids": ids}, ensure_ascii=False, indent=1
+        target = out_dir / "_search.json"
+        if target.exists() and not args.force:
+            LOG.info("search already captured, skipping (use --force to re-fetch)")
+        else:
+            try:
+                # The raw response, not just the ids: the first search against
+                # a new provider is the call that shows where its hits live and
+                # what each one carries. Keeping only parsed ids — which, with
+                # an unaudited map, may well be none — would throw that away.
+                payload = client.search_response(args.search)
+                spent += 1
+                hits = source_mod._hits_from_search_payload(payload, config)
+                ids = source_mod._ids_from_hits(hits, config)
+                target.write_text(
+                    json.dumps(
+                        {
+                            "keyword": args.search,
+                            "provider": args.provider,
+                            "payload": payload,
+                            "ids": ids,
+                        },
+                        ensure_ascii=False,
+                        indent=1,
+                    )
+                    + "\n",
+                    encoding="utf-8",
                 )
-                + "\n",
-                encoding="utf-8",
-            )
-            LOG.info("search %r -> %d id(s) -> %s", args.search, len(ids), target.name)
-        except source_mod.SourceError as exc:
-            LOG.error("search failed: %s", exc)
+                LOG.info(
+                    "search %r -> %d hit(s) found by the current paths -> %s",
+                    args.search,
+                    len(hits),
+                    target.name,
+                )
+                if not hits:
+                    LOG.info(
+                        "no hits at the configured paths; audit.py will show "
+                        "where they actually are"
+                    )
+            except source_mod.SourceError as exc:
+                LOG.error("search failed: %s", exc)
 
     LOG.info("billed calls this run: %d", spent)
     LOG.info("now run: python audit.py %s", out_dir)

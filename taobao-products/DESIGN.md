@@ -1,39 +1,32 @@
-# Taobao / Tmall product data — design
+# 1688 wholesale product data — design
 
 ## What this sells
 
-Not "another Taobao scraper". The store already has 26, four of them above
-1,700 monthly users, and the cheapest is at $0.0015 per product. Competing on
-"same fields, more reliable" is a losing position once upstream access has to
-be paid for: at $0.003 per product the margin after Apify's 20% and the
-upstream call is somewhere around zero.
+Not "another 1688 scraper". What a sourcing buyer actually needs from a 1688
+listing is not its headline price, which is only the bottom rung of a wholesale
+ladder, but **what the order they intend to place will cost**. Every scraper in
+the category hands back the headline, or the ladder as text, and leaves the
+arithmetic to the buyer. This Actor walks the ladder for a stated quantity and
+returns the unit price, the subtotal, the rung it landed on, and whether the
+quantity clears the seller's 起订量.
 
-What nobody in that list returns is **Chinese commerce semantics resolved into
-typed English fields**. Concretely, every competitor hands back one of these:
+Around that: sales figures labelled with the window and unit they measure
+(`月销1000+` and `已售2万+` are both "sales" on a page and not the same
+measurement); Chinese and English titles kept in separate fields and never
+mixed; typed prices, ladders and minimum orders; and two detail levels, so a
+buyer can shortlist wide and cheap before paying for full records.
 
-    "sales": "月销1000+"        # a string the buyer has to parse
-    "sales": 1000               # wrong: drops the window and the "+"
+### What became of the citation contract
 
-Those are two different metrics. `月销 1000+` is a 30-day floor; `已售 2万+` is
-a cumulative floor of 20,000. A sourcing analyst sorting by "best selling"
-across both gets garbage. This Actor returns:
-
-    "sales": {
-      "count": 1000,            # the floor, as an integer
-      "isApproximate": true,    # the "+" was present
-      "window": "monthly",      # monthly | cumulative | last_30_days | null
-      "unit": "orders",         # orders | buyers | items
-      "sourceTextCn": "月销1000+"
-    }
-
-The same treatment for prices and ranges, 阶梯价 tiers, 起订量, shipping terms,
-the three separate 店铺评分 scores, SKU matrices, and 预售 vs 现货. Each
-normalised field keeps the Chinese string it came from, so the buyer can audit
-it without reading Chinese — the same contract as the A-share Actor.
-
-Target price: **$0.012 per product.** Above zen-studio's $0.010, far below
-sian.agency's $0.036 (which has 1,354 lifetime users, so the top of the range
-is real).
+The A-share Actor's promise was that every figure carries the Chinese sentence
+it came from. That holds where a value is *read from text* — a sales line like
+`已售2万+`, a ladder printed as `2-99件`. It does not hold for a data source
+that hands back typed numbers, and 1688 via OTAPI is one: there is no listing
+text behind `{"MinQuantity": 100}` to quote. So `sourceTextCn` is filled where
+there was text and `null` where the value arrived typed, and the README says so
+plainly. A number dressed up as a citation — `"sourceTextCn": "860"` beside a
+30-day window the text never stated — would be worse than the null, and there
+is a test against exactly that.
 
 ## Data path, and why it is pluggable
 
@@ -70,9 +63,45 @@ each found by reading it rather than by a test failing:
   fuzzy stock figure. Returning it as a bare integer would claim a precision
   the platform never gave, which is the exact failure this Actor sells against.
 
-The normalisation layer — the part that is actually the product — is fed from a
-provider-neutral intermediate shape, so it is tested and correct before any
-credential exists.
+(Those three are OneBound's conventions, kept for when it is added for
+Taobao.)
+
+### Everything provider-specific travels with the source
+
+A provider differs in far more than its URL: its paths, its auth style, its
+paging, how it writes ids, how it reports errors in a 200 body, where a search
+response keeps its hits, and what each field is called. All of it lives on
+`SourceConfig`, every source carries one as `source.config`, and the
+normaliser, the Actor, `capture.py` and `audit.py` all read from it. An early
+version normalised every record with one hard-coded map whatever the source,
+which meant a second provider's records would all have come back unparsable
+without any single line looking wrong.
+
+The `otapi-1688` preset is the current data source. Its request side is
+confirmed from the provider's own samples: `BatchGetItemFullInfo` and
+`BatchSearchItemsFrame` (not the playground's display names), credentials in
+`x-rapidapi-*` headers, a zero-based `framePosition` offset, a required
+`language`, and 1688 ids written `abb-612345678901` on the wire — added to
+every request, stripped from everything returned. Its field maps are left empty
+until written from a real response; see `VALIDATION.md`.
+
+Two things the provider work changed in the shared code:
+
+* **Risk-control markers are never matched against a product record.** The
+  check used to scan the whole response body, and 滑块 is also a large 1688
+  category (直线导轨滑块, linear-guide sliders): any such listing came back as a
+  platform refusal, unbilled and empty. Markers are now matched only against a
+  non-JSON body, or against a JSON body known not to be a listing because the
+  map expects a title and none came back.
+* **Structured data is first-class.** A ladder given as typed rungs with only a
+  starting quantity each is closed by the next rung's start; a value in a
+  name/value list is addressed by name (`FeaturedValues[Name=…].Value`) since
+  the order is not stable; and the facts a typed value cannot state for itself
+  — that a sales figure is a 30-day one, whether stock is exact — come from the
+  provider's `hints`.
+
+The normalisation layer — the part that is actually the product — is tested
+against both shapes before any credential exists.
 
 ## Modules
 
@@ -99,55 +128,58 @@ the buyer sees which ids were refused upstream rather than a failed run.
 
 ## Unit economics
 
-Priced at $0.012 per product, against OneBound's A-class pay-as-you-go rate
-(0.022 元 per call, price list dated 2026-06-26, at 6.7029 CNY/USD):
+Data source: OTAPI 1688 on RapidAPI. The tiers include a daily allowance, and
+the per-call price shown on the listing is the *overage* rate, not the base:
+
+| Plan | $/mo | Included | Effective per call |
+|---|---|---|---|
+| Basic | $0 | 20/day | — |
+| Pro | $25 | 900/day | $0.000926 |
+| Ultra | $150 | 5,500/day | $0.000909 |
+| Mega | $350 | 15,000/day | $0.000778 |
+
+Full detail at $0.012 a product, on Pro:
 
     sell price                 $0.0120
     less Apify's 20%          -$0.0024
-    less platform compute     -$0.00007   (512 MB, ~1.5 s per item)
-    less upstream call        -$0.00328
+    less platform compute     -$0.00007
+    less data-source call     -$0.00093
     ------------------------------------
-    margin                     $0.00625   (52%)
+    margin                     $0.00860   (72%)
 
-Pay-as-you-go is the launch choice despite a worse unit rate than the monthly
-plan (0.01 元, a 52% to 67% margin improvement) because the monthly plan is a
-one-year commitment at 1,500 元/month and breaks even only above ~27,800
-products a month. Revisit once monthly volume is reliably past that.
+Pro pays for itself after ~2,900 products a month, and can be stopped any
+month. Validation and the first buyers fit inside Basic at no cost.
 
-Pay-as-you-go is not, however, free of fixed cost: **the provider's minimum
-top-up is 1,000 元** (~$149) and **a balance expires after one year**. So the
-real shape is a $149 prepayment buying ~45,000 calls, which the detail tier
-pays back after ~23,800 products sold, or the listing tier after ~101,000
-records. Both are reachable, but the outlay is real and it is use-it-or-lose-it,
-which argues for launching both tiers at once rather than detail alone: the
-cheap tier burns the balance far more slowly per record and is the one a new
-buyer tries first.
+Listing level at $0.002 a record: a search call returns up to 50 hits, so the
+data-source cost per record is about $0.00002 and the margin about 76%. It is
+also what a buyer shortlisting a hundred candidates wants, and it funnels into
+full detail for the handful they settle on.
 
-Listing mode changes the shape of that. A search call costs the same 0.022 元
-but returns a whole page, so at 40 hits a page the upstream cost is $0.000082
-per record. Priced at $0.002 that is a **73% margin** — better than full
-detail, and still 61% if a page only returns ten hits. It is also what a buyer
-shortlisting a hundred candidates actually wants, and it funnels into the
-expensive call for the handful they settle on.
+Two constraints that do not change with the provider:
 
-Two things this model makes non-negotiable:
+* **A second call per product needs pricing first.** Shipping, descriptions and
+  vendor details are separate endpoints. Each one added per product is another
+  billed call; nothing gets added on the assumption that it is cheap.
+* **Default `maxProducts` stays low.** Free-plan Apify users generate no
+  revenue — Apify covers their platform cost but not the data-source call,
+  which is ours.
 
-* **Shipping is never a second call.** `item_fee` is a B-class interface at
-  0.05 元 — 2.3x the item call. Fetching it per product takes the margin to
-  **-$0.00121**, i.e. every sale loses money. Shipping comes out of the item
-  record or comes back null.
+### Later: Taobao through OneBound
 
-* **Default `maxProducts` stays low.** Free-plan users generate no revenue —
-  Apify covers their platform cost but not the upstream call, which is ours.
-  At 20% of volume served to free-plan users the real margin is $0.00434, not
-  $0.00625.
-
-For reference, the cheap end of the store ($3.00/1,000) nets $0.00233 per
-product, which is below the pay-as-you-go call cost. Those listings only work
-on the committed monthly plan, which is why they compete on price: they are
-carrying a fixed cost that has to be amortised.
+OTAPI's RapidAPI listing is 1688 only. OneBound covers Taobao, Tmall and 1688
+on one interface at 0.022 元 a call (52% margin at $0.012), but its minimum
+top-up is 1,000 元 (~$149) and a balance expires after a year, and the account
+needs 实名认证 (individual verification is accepted). The cheap end of the
+Taobao store ($3.00/1,000) nets $0.00233 a product — below that call cost — so
+those listings only work on a committed monthly plan. Revisit once 1688 revenue
+covers the prepayment; it is a preset, not a rewrite.
 
 ## Throughput
+
+*The figures below were measured against a simulated 300 ms round-trip.
+RapidAPI lists this data source's latency at ~2.5 s, so they need re-measuring
+against the real thing before any of them appears on the Store page.*
+
 
 The A-share Actor spaces its requests a second apart because it reads CNINFO's
 public endpoints, where that is simple courtesy. This one calls a provider API

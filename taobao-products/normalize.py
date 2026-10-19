@@ -10,12 +10,11 @@ that works on the sample and fails in production.
 from __future__ import annotations
 
 import re
-import re
 from datetime import datetime, timezone
 from typing import Any
 
 import units
-from models import Money, Product, PriceTier, Quote, ShopScore, Sku, Status, Stock
+from models import Money, Product, PriceTier, Quote, Sales, ShopScore, Sku, Status, Stock
 from source import RawProduct, SourceConfig, dig
 
 #: 1688 item ids live under a different host than Taobao's.
@@ -29,6 +28,30 @@ _URL_TEMPLATES = {
 #: A property-id key, e.g. "1627207:28320" or "20509". Digits and colons
 #: only, so a real axis name like 品牌 or "Ships from" never matches.
 _PROPERTY_ID = re.compile(r"[\d:]+")
+
+#: A plain decimal with nothing around it: a typed value serialised as a string.
+_BARE_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+
+#: Any CJK ideograph. A provider asked for English may hand back a translated
+#: title; a field named titleCn must never carry it.
+_CJK = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
+
+
+def _split_titles(primary: str | None, english: str | None) -> tuple[str | None, str | None]:
+    """Sort a provider's titles into (Chinese, English).
+
+    ``primary`` is what the map calls the Chinese title. If it carries no
+    Chinese at all it is a translation, and goes to the English slot instead —
+    a field named for Chinese holding English is worse than a null.
+    """
+    title_cn = primary if primary and _CJK.search(primary) else None
+    title_en = english
+    if primary and not title_cn and not title_en:
+        title_en = primary
+    if title_en and _CJK.search(title_en) and not title_cn:
+        # The "English" field is in fact Chinese: put it where it belongs.
+        title_cn, title_en = title_en, None
+    return title_cn, title_en
 
 
 def _as_list(value: Any) -> list[Any]:
@@ -221,8 +244,18 @@ def _normalize_shop_scores(raw: Any) -> list[ShopScore]:
     return scores
 
 
-def _normalize_tiers(raw: Any) -> list[PriceTier]:
-    """Build a 阶梯价 ladder, sorted by the quantity it starts at."""
+def _normalize_tiers(raw: Any, hint: dict[str, Any] | None = None) -> list[PriceTier]:
+    """Build a 阶梯价 ladder, sorted by the quantity it starts at.
+
+    Two shapes. Text rungs ("2-99件" / "12.00") carry their own span and are
+    parsed as written. Structured rungs carry numbers under keys the provider
+    chooses, named by the ``tiers`` hint — and usually only a *minimum*
+    quantity, the top of each rung being one below the next rung's start.
+    Without deriving that, a structured ladder used to be dropped whole, and
+    the quote had nothing to walk.
+    """
+    if hint and (hint.get("min_qty") or hint.get("price")):
+        return _structured_tiers(raw, hint)
     tiers: list[PriceTier] = []
     entries = _as_list(raw)
     if isinstance(raw, dict):
@@ -255,6 +288,40 @@ def _normalize_tiers(raw: Any) -> list[PriceTier]:
     return tiers
 
 
+def _structured_tiers(raw: Any, hint: dict[str, Any]) -> list[PriceTier]:
+    """Rungs given as numbers, possibly with only a starting quantity each."""
+    rungs: list[tuple[int, int | None, Money]] = []
+    for entry in _as_list(raw):
+        if not isinstance(entry, dict):
+            continue
+        min_raw = dig(entry, hint["min_qty"]) if hint.get("min_qty") else None
+        max_raw = dig(entry, hint["max_qty"]) if hint.get("max_qty") else None
+        price_raw = dig(entry, hint["price"]) if hint.get("price") else None
+        low = units.parse_quantity(_scalar(min_raw))
+        price = units.parse_price(_scalar(price_raw))
+        if low is None or price is None:
+            continue
+        high = units.parse_quantity(_scalar(max_raw)) if max_raw is not None else None
+        rungs.append((low.value, high.value if high else None, price))
+
+    rungs.sort(key=lambda r: r[0])
+    tiers: list[PriceTier] = []
+    for index, (low, high, price) in enumerate(rungs):
+        if high is None and index + 1 < len(rungs):
+            # Only a start was given: the rung ends where the next begins.
+            high = rungs[index + 1][0] - 1
+        tiers.append(
+            PriceTier(
+                min_qty=low,
+                max_qty=high,
+                unit_price=price,
+                # Typed numbers, not listing text: nothing to quote verbatim.
+                source_text_cn=None,
+            )
+        )
+    return tiers
+
+
 def _platform_for(raw: RawProduct) -> str:
     """Trust the source's platform when it names one this project knows."""
     if raw.platform in _URL_TEMPLATES:
@@ -276,14 +343,19 @@ def normalize(
     ``quantity``, when given, adds a :class:`Quote`: the unit price and
     subtotal for that many pieces, resolved against the wholesale ladder.
     """
-    field_map = (config or SourceConfig(base_url="")).field_map
+    config = config or SourceConfig(base_url="")
+    field_map = config.field_map
+    hints = config.hints or {}
     platform = _platform_for(raw)
-    url = _URL_TEMPLATES[platform].format(item_id=raw.item_id)
+    # The record and its URL always carry the platform's own id. A provider
+    # prefix such as OTAPI's "abb-" stays on the wire.
+    platform_id = config.from_wire_id(raw.item_id)
+    url = _URL_TEMPLATES[platform].format(item_id=platform_id)
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     if raw.payload is None or raw.status != "ok":
         return Product(
-            item_id=raw.item_id,
+            item_id=platform_id,
             platform=platform,  # type: ignore[arg-type]
             url=url,
             status=raw.status if raw.status != "ok" else "unparsable",  # type: ignore[arg-type]
@@ -295,10 +367,12 @@ def normalize(
         path = field_map.get(name)
         return dig(raw.payload, path) if path else None
 
-    title_cn = _first_str(field("title_cn"))
-    if not title_cn:
+    title_cn, title_en = _split_titles(
+        _first_str(field("title_cn")), _first_str(field("title_en"))
+    )
+    if not title_cn and not title_en:
         return Product(
-            item_id=raw.item_id,
+            item_id=platform_id,
             platform=platform,  # type: ignore[arg-type]
             url=url,
             status="unparsable",
@@ -326,8 +400,13 @@ def normalize(
         if price is not None and len(set(candidates)) > 1:
             price = Money(value=min(candidates), value_max=max(candidates))
 
-    stock_text = _first_str(field("stock"))
-    stock_value = units.parse_cn_number(stock_text)
+    stock_raw = _scalar(field("stock"))
+    stock_text = stock_raw if isinstance(stock_raw, str) else None
+    stock_value = (
+        float(stock_raw) if isinstance(stock_raw, (int, float))
+        else units.parse_cn_number(stock_text)
+    )
+    stock_approximate = bool((hints.get("stock") or {}).get("approximate", True))
     shipping = units.parse_shipping(_first_str(field("shipping")))
     ships_from = _first_str(field("ships_from"))
     if shipping and ships_from:
@@ -343,22 +422,25 @@ def normalize(
     if presale_text is not None:
         is_presale = "预售" in units.normalize_text(presale_text)
 
+    mapped_id = _first_str(field("item_id"))
     product = Product(
-        item_id=str(_first_str(field("item_id")) or raw.item_id),
+        item_id=config.from_wire_id(mapped_id) if mapped_id else platform_id,
         platform=platform,  # type: ignore[arg-type]
         url=url,
         status="ok",
         title_cn=title_cn,
+        title_en=title_en,
         price=price,
         original_price=units.parse_price(_scalar(field("original_price"))),
-        price_tiers=_normalize_tiers(field("tiers")),
+        price_tiers=_normalize_tiers(field("tiers"), hints.get("tiers")),
         min_order_quantity=units.parse_quantity(_scalar(field("min_order_quantity"))),
-        sales=units.parse_sales(_first_str(field("sales"))),
+        sales=_sales(field("sales"), hints.get("sales")),
         stock=(
             Stock(
                 value=int(stock_value),
-                # Taobao publishes a rounded figure, not a count.
-                is_approximate=True,
+                # Whether the figure is a count or a rounded display value is
+                # a fact about the provider, so it comes from its hints.
+                is_approximate=stock_approximate,
                 source_text_cn=stock_text,
             )
             if stock_value is not None
@@ -381,6 +463,30 @@ def normalize(
     if quantity is not None and quantity > 0:
         product.quote = _build_quote(product, quantity)
     return product
+
+
+def _sales(raw: Any, hint: dict[str, Any] | None) -> Sales | None:
+    """Parse a sales figure, filling in what the data cannot say for itself.
+
+    A text figure like "月销1000+" states its own window. A structured one —
+    a bare number under a field called SalesInLast30Days — does not, and the
+    window lives in the field's *name*; the provider's ``sales`` hint carries
+    it. A hint never overrides what the text itself says.
+    """
+    value = _scalar(raw)
+    if isinstance(value, str) and _BARE_NUMBER.fullmatch(value.strip()):
+        # A number that merely arrived as a string ("860") is not listing
+        # text. Citing it as sourceTextCn beside a window taken from the hint
+        # would imply the text supports a claim it never made.
+        value = float(value.strip())
+    sales = units.parse_sales(value)
+    if sales is None or not hint:
+        return sales
+    if sales.window is None and hint.get("window"):
+        sales.window = hint["window"]
+    if sales.unit is None and hint.get("unit"):
+        sales.unit = hint["unit"]
+    return sales
 
 
 def _build_quote(product: Product, quantity: int) -> Quote:
@@ -440,27 +546,12 @@ def _discount_pct(price: Money | None, original: Money | None) -> float | None:
     return round((original.value - price.value) / original.value * 100, 1)
 
 
-#: Where a search hit's fields sit. Search responses are flatter than item
-#: responses — no SKU array, no properties, no shop scores — so they get their
-#: own small map rather than reusing the item one.
-SEARCH_FIELD_MAP: dict[str, str] = {
-    "item_id": "num_iid",
-    "title_cn": "title",
-    "price": "price",
-    "original_price": "orginal_price",
-    "sales": "sales",
-    "shop_name_cn": "nick",
-    "shop_id": "seller_id",
-    "ships_from": "location",
-    "image": "pic_url",
-}
-
-
 def normalize_search_entry(
     entry: dict[str, Any],
     *,
     platform: str,
     quantity: int | None = None,
+    config: SourceConfig | None = None,
 ) -> Product:
     """Turn one search hit into a ``listed`` record.
 
@@ -471,16 +562,21 @@ def normalize_search_entry(
     cannot carry — the SKU matrix, 阶梯价, shipping terms, shop scores — are
     absent rather than null-because-the-listing-is-silent.
     """
+    config = config or SourceConfig(base_url="")
+    hints = config.hints or {}
     platform = platform if platform in _URL_TEMPLATES else "taobao"
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
     def field(name: str) -> Any:
-        path = SEARCH_FIELD_MAP.get(name)
+        path = config.search_field_map.get(name)
         return dig(entry, path) if path else None
 
-    item_id = _first_str(field("item_id"))
-    title_cn = _first_str(field("title_cn"))
-    if not item_id or not title_cn:
+    wire_id = _first_str(field("item_id"))
+    item_id = config.from_wire_id(wire_id) if wire_id else None
+    title_cn, title_en = _split_titles(
+        _first_str(field("title_cn")), _first_str(field("title_en"))
+    )
+    if not item_id or not (title_cn or title_en):
         return Product(
             item_id=item_id or "",
             platform=platform,  # type: ignore[arg-type]
@@ -497,9 +593,10 @@ def normalize_search_entry(
         url=_URL_TEMPLATES[platform].format(item_id=item_id),
         status="listed",
         title_cn=title_cn,
+        title_en=title_en,
         price=price,
         original_price=units.parse_price(_scalar(field("original_price"))),
-        sales=units.parse_sales(_first_str(field("sales"))),
+        sales=_sales(field("sales"), hints.get("sales")),
         shop_name_cn=_first_str(field("shop_name_cn")),
         shop_id=_first_str(field("shop_id")),
         images=_normalize_images(field("image")),

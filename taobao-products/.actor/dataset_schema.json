@@ -8,6 +8,7 @@
           "itemId",
           "status",
           "titleCn",
+          "titleEn",
           "price",
           "discountPct",
           "sales",
@@ -40,7 +41,7 @@
             "label": "Shipping"
           },
           "shopNameCn": {
-            "label": "Shop"
+            "label": "Supplier"
           },
           "stock": {
             "label": "Stock"
@@ -53,6 +54,9 @@
           },
           "skuCount": {
             "label": "Variants"
+          },
+          "titleEn": {
+            "label": "Title (EN)"
           }
         }
       }

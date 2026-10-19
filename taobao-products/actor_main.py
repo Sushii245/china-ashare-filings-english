@@ -45,6 +45,10 @@ EVENT_LISTED = "product-listed"
 #: its own provider contract needs.
 ENV_BASE_URL = "SOURCE_BASE_URL"
 ENV_API_KEY = "SOURCE_API_KEY"
+#: Name of a built-in provider preset, e.g. "otapi-1688". A preset knows its
+#: provider's paths, auth style, paging, id prefix and field maps; a bare base
+#: URL knows none of that and falls back to the query-string defaults.
+ENV_PROVIDER = "SOURCE_PROVIDER"
 
 #: Set to a directory of recorded payloads to run without any provider.
 ENV_FIXTURES = "ACTOR_SOURCE_FIXTURES"
@@ -125,37 +129,83 @@ def _urls_from_input(raw: Any) -> list[str]:
     return urls
 
 
+def _preset_config(name: str, api_key: str) -> source_mod.SourceConfig:
+    """Build a named provider preset, or explain which names exist."""
+    factory = source_mod.PROVIDER_PRESETS.get(name)
+    if factory is None:
+        raise source_mod.SourceError(
+            f"unknown provider {name!r}; known: "
+            + ", ".join(sorted(source_mod.PROVIDER_PRESETS))
+        )
+    return factory(api_key)
+
+
 def _build_source(
     actor_input: dict[str, Any], platform: str, min_interval: float
 ) -> source_mod.ProductSource:
-    """Pick the data source: fixtures, the buyer's provider, or the operator's."""
+    """Pick the data source.
+
+    In order: recorded payloads (``ACTOR_SOURCE_FIXTURES``, replayed through
+    the named preset's maps when ``SOURCE_PROVIDER`` is set, so a capture is
+    read exactly as live data would be); the operator's preset with the
+    buyer's key; the operator's preset with the operator's key; a bare
+    operator base URL with the default query-string maps.
+    """
+    provider = (os.environ.get(ENV_PROVIDER) or "").strip()
+
     fixtures = os.environ.get(ENV_FIXTURES)
     if fixtures:
-        Actor.log.info("Reading recorded payloads from %s.", fixtures)
-        return source_mod.FixtureSource(fixtures, platform=platform)
+        config = _preset_config(provider, "") if provider else None
+        Actor.log.info(
+            "Reading recorded payloads from %s%s.",
+            fixtures,
+            f" through the {provider} maps" if provider else "",
+        )
+        return source_mod.FixtureSource(fixtures, platform=platform, config=config)
 
-    base_url = (actor_input.get("sourceBaseUrl") or "").strip()
-    api_key = (actor_input.get("sourceApiKey") or "").strip()
-    if base_url:
-        Actor.log.info("Using the product data provider supplied in the input.")
+    # A buyer can bring their own key for the operator's provider, but not a
+    # bare provider URL: without that provider's paths, auth style and field
+    # maps a URL alone produces nothing but unparsable records.
+    buyer_key = (actor_input.get("sourceApiKey") or "").strip()
+    operator_key = (os.environ.get(ENV_API_KEY) or "").strip()
+
+    if provider:
+        if buyer_key:
+            Actor.log.info("Using the %s provider with the key supplied in the input.", provider)
+        key = buyer_key or operator_key
+        if not key:
+            raise source_mod.SourceError(
+                f"provider {provider!r} is selected but no key is set: add the "
+                f"Actor secret {ENV_API_KEY}, or supply a key in the input under "
+                "Advanced."
+            )
+        config = _preset_config(provider, key)
     else:
         base_url = (os.environ.get(ENV_BASE_URL) or "").strip()
-        api_key = (os.environ.get(ENV_API_KEY) or "").strip()
+        if not base_url:
+            raise source_mod.SourceError(
+                "no product data provider is configured. Set the Actor "
+                f"environment variable {ENV_PROVIDER} (e.g. otapi-1688) and the "
+                f"secret {ENV_API_KEY}."
+            )
+        config = source_mod.SourceConfig(base_url=base_url, api_key=operator_key or None)
 
-    if not base_url:
-        raise source_mod.SourceError(
-            "no product data provider is configured. Set the Actor secrets "
-            f"{ENV_BASE_URL} and {ENV_API_KEY}, or supply them in the input "
-            "under Advanced."
-        )
-
-    config = source_mod.SourceConfig(
-        base_url=base_url, api_key=api_key or None, min_interval=min_interval
-    )
-    if platform == "1688":
-        config.detail_path = "/1688/item_get"
-        config.search_path = "/1688/item_search"
+    config.min_interval = min_interval
     return source_mod.UpstreamSource(config, platform=platform)
+
+
+def _check_platform_served(platform: str, data_source: source_mod.ProductSource) -> None:
+    """Refuse a platform the configured provider does not serve.
+
+    Without this, asking an OTAPI-1688 source for Taobao spends a billed call
+    per id on certain misses before anyone notices.
+    """
+    served = data_source.config.platforms
+    if platform not in served:
+        raise ValueError(
+            f"this Actor's data source serves {', '.join(served)} only; "
+            f"{platform!r} was requested"
+        )
 
 
 def _resolve_ids(
@@ -274,8 +324,11 @@ def _fetch_chunk(
                 status="upstream_error",
                 status_detail=str(exc),
             )
+        # The source's own maps, always. Normalising with anything else is how
+        # every record from a new provider comes out "unparsable".
+        config = data_source.config
         try:
-            return normalize_mod.normalize(raw, quantity=quantity)
+            return normalize_mod.normalize(raw, config=config, quantity=quantity)
         except Exception as exc:
             return normalize_mod.normalize(
                 source_mod.RawProduct(
@@ -284,7 +337,8 @@ def _fetch_chunk(
                     payload=None,
                     status="unparsable",
                     status_detail=str(exc),
-                )
+                ),
+                config=config,
             )
 
     if workers <= 1 or len(item_ids) == 1:
@@ -324,7 +378,7 @@ async def _run_listing_mode(
             if returned + skipped >= limit:
                 break
             product = normalize_mod.normalize_search_entry(
-                entry, platform=platform, quantity=quantity
+                entry, platform=platform, quantity=quantity, config=data_source.config
             )
             if product.item_id and product.item_id in seen:
                 continue
@@ -371,7 +425,7 @@ async def main() -> None:
 
         try:
             platform = _validate_platform(
-                (actor_input.get("platform") or "taobao").strip()
+                (actor_input.get("platform") or "1688").strip()
             )
         except ValueError as exc:
             await Actor.fail(status_message=str(exc))
@@ -396,7 +450,8 @@ async def main() -> None:
 
         try:
             data_source = _build_source(actor_input, platform, min_interval)
-        except source_mod.SourceError as exc:
+            _check_platform_served(platform, data_source)
+        except (source_mod.SourceError, ValueError) as exc:
             await Actor.fail(status_message=str(exc))
             return
 

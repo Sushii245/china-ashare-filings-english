@@ -1,135 +1,92 @@
-# Taobao & Tmall Products — Normalised English Fields
+# 1688 Wholesale Products — Tiered Prices & Order Quotes
 
-**Taobao, Tmall and 1688 listings as typed records, not strings you have to parse yourself.**
+**Price the order you intend to place, not the headline on the listing.**
 
-Every scraper in this category hands you the listing's own text and stops. You
-get `"sales": "月销1000+"` and `"price": "128.00-298.00"` and the actual work —
-working out what those mean — is still yours.
-
-This Actor finishes the job. Prices come back as spans with a low and a high.
-Sales figures come back with **what they measure**. Wholesale ladders come back
-as a sorted list you can price an order against. And every normalised field
-keeps the Chinese text it came from, so you can check it without reading
-Chinese.
+On 1688 the price shown first is only the bottom rung of a wholesale ladder —
+`2-99件 ¥12.00 / 100-999件 ¥10.50 / ≥1000件 ¥9.00` — and the seller has a
+minimum order besides. Every other scraper hands you that headline, or the
+ladder as text, and leaves the arithmetic to you. This Actor does it: tell it
+how many pieces you want and each record comes back with the unit price at that
+quantity, the subtotal, which rung it landed on, and whether you clear the
+seller's minimum.
 
 ---
 
-## The field that matters most
+## The quote
 
-`月销1000+` and `已售2万+` are both labelled "sales" on the page. They are not
-the same measurement. The first is a 30-day floor; the second is a lifetime
-floor of 20,000. Sort a shortlist by "sales" across both and the ranking is
-meaningless.
-
-```json
-"sales": {
-  "count": 1000,
-  "isApproximate": true,
-  "window": "monthly",
-  "unit": null,
-  "sourceTextCn": "月销1000+"
-}
-```
-
-`window` is `monthly`, `last_30_days` or `cumulative`. `unit` is `orders`,
-`buyers` or `items` — because `100+人付款` counts **people**, not pieces, and a
-sourcing model that treats them as units is wrong before it starts.
-
-## What you get per listing
-
-```json
-{
-  "itemId": "600530677383",
-  "platform": "taobao",
-  "titleCn": "无线蓝牙耳机 入耳式降噪 长续航 适用苹果安卓",
-  "price": { "value": 128.0, "valueMax": 298.0, "currency": "CNY",
-             "sourceTextCn": "128.00-298.00" },
-  "originalPrice": { "value": 358.0, "sourceTextCn": "￥358.00" },
-  "shipping": { "included": true, "fee": { "value": 0.0 },
-                "cashOnDelivery": false, "shipsFromCn": "广东 深圳",
-                "sourceTextCn": "包邮" },
-  "shopScores": [
-    { "aspect": "description_match", "aspectCn": "宝贝描述",
-      "score": 4.8, "vsPeersPct": 20.15 },
-    { "aspect": "service", "aspectCn": "卖家服务",
-      "score": 4.7, "vsPeersPct": -3.2 },
-    { "aspect": "logistics", "aspectCn": "物流服务",
-      "score": 4.9, "vsPeersPct": 0.0 }
-  ],
-  "stock": { "value": 4532, "isApproximate": true, "sourceTextCn": "4532" },
-  "skus": [
-    { "skuId": "5001", "optionsCn": { "颜色分类": "黑色", "版本": "标准版" },
-      "price": { "value": 128.0 }, "stock": 2100 }
-  ],
-  "status": "ok"
-}
-```
-
-On 1688 you also get the wholesale ladder and the minimum order:
-
-```json
-"minOrderQuantity": { "value": 2, "unitCn": "件", "sourceTextCn": "起订量：2件" },
-"priceTiers": [
-  { "minQty": 2,    "maxQty": 99,   "unitPrice": { "value": 12.0 }, "sourceTextCn": "2-99件 12.00" },
-  { "minQty": 100,  "maxQty": 999,  "unitPrice": { "value": 10.5 }, "sourceTextCn": "100-999件 10.50" },
-  { "minQty": 1000, "maxQty": null, "unitPrice": { "value": 9.0 },  "sourceTextCn": "≥1000件 9.00" }
-]
-```
-
-`maxQty: null` is the open-ended top step.
-
-### Or just tell it how many you want
-
-Set **Order quantity to price** and the Actor walks the ladder for you, which
-is the question you actually had:
+Set **Order quantity to price**:
 
 ```json
 "quote": {
   "quantity": 500,
-  "unitPrice": { "value": 10.5, "sourceTextCn": "10.50" },
-  "subtotal": { "value": 5250.0, "sourceTextCn": null },
-  "tierSourceTextCn": "100-999件 10.50",
+  "unitPrice": { "value": 10.5, "currency": "CNY" },
+  "subtotal": { "value": 5250.0, "currency": "CNY" },
   "meetsMinimumOrder": true
 }
 ```
 
-`tierSourceTextCn` shows which step it landed on, so the number is checkable.
-`meetsMinimumOrder` is false when your quantity is under the seller's 起订量 —
-the price is still quoted, because you still want to know it. A listing priced
-as a span across variants has no single unit price to resolve to, so
-`unitPrice` comes back null rather than quietly using the low end.
+The ladder it walked is on the record too, as a sorted list with the top rung
+left open:
 
----
+```json
+"priceTiers": [
+  { "minQty": 2,    "maxQty": 99,   "unitPrice": { "value": 12.0 } },
+  { "minQty": 100,  "maxQty": 999,  "unitPrice": { "value": 10.5 } },
+  { "minQty": 1000, "maxQty": null, "unitPrice": { "value": 9.0 } }
+],
+"minOrderQuantity": { "value": 2 }
+```
 
-## How this differs from the other Taobao scrapers
+- Below the seller's minimum the quote is still priced, with
+  `meetsMinimumOrder: false` — you still want the number.
+- A ladder whose rungs overlap quotes the **dearer** matching rung. Nothing
+  says which the seller means, and understating an order is the harmful way to
+  be wrong.
+- A quantity that falls between rungs, or a listing with no ladder, is priced
+  off the listing price.
+- A listing priced as a span across variants has no single unit price to
+  resolve to, so `unitPrice` is `null` rather than quietly the low end.
 
-| | Typical Taobao scraper | This Actor |
-|---|---|---|
-| Price | `"128.00-298.00"` as a string | `value` 128, `valueMax` 298, typed |
-| Sales | `"月销1000+"` as a string, or `1000` with the meaning dropped | count, floor flag, window, and what is counted |
-| 万 / 亿 | Your problem | Converted in Decimal — `2.3亿` is exactly 230000000 |
-| Fullwidth `１２８．００` | Breaks, or parses as something else | NFKC-folded before parsing |
-| 阶梯价 | Absent, or a raw string | Sorted `{minQty, maxQty, unitPrice}` array |
-| 包邮 / 到付 | One "shipping" string | Seller-pays, buyer-fee, and cash-on-delivery told apart |
-| Seller scores | One number, or absent | Three aspects kept apart, each with a signed peer delta |
-| SKU axes | `"1627207:28320:颜色分类:黑色"` | `{"颜色分类": "黑色"}` |
-| Stock | A bare integer | Flagged `isApproximate`, because the platform publishes a rounded figure |
-| "What do 500 cost?" | Work it out yourself | `quote` walks the ladder and names the step it used |
-| Discount | Absent | `discountPct` against the struck-through price |
-| Verification | None | Every normalised field carries its Chinese source text |
+## Sales figures that say what they measure
 
-## Typical uses
+A sales number is only comparable to another if they cover the same window and
+count the same thing. Each record says both:
 
-- **Product sourcing** — compare landed unit cost across 1688 suppliers at your
-  actual order quantity, not at the headline price.
-- **Amazon and DTC product research** — rank candidates on a sales figure whose
-  window you can trust.
-- **Price and assortment monitoring** — track a competitor's SKU matrix and
-  promotional versus list price over time.
-- **Counterfeit and brand monitoring** — listing, shop and seller scores in one
-  record, with the Chinese text kept for evidence.
-- **Agent and LLM pipelines** — typed JSON, so a model does not have to guess
-  what `已售2万+` means.
+```json
+"sales": {
+  "count": 860,
+  "isApproximate": false,
+  "window": "last_30_days",
+  "unit": "orders"
+}
+```
+
+`window` is `monthly`, `last_30_days` or `cumulative`; `unit` is `orders`,
+`buyers` or `items`. Where a figure is printed as text with a floor — `已售2万+`
+— `count` is the floor, `isApproximate` is true, and `2万` is read as 20,000.
+
+## Chinese and English, never mixed
+
+`titleCn` is the seller's own title. `titleEn` is an English rendering where
+one is available. A field named for Chinese never carries English: if the only
+title available is a translation, `titleCn` is `null` and the translation is in
+`titleEn`.
+
+## Two detail levels
+
+**Full detail** fetches each listing: the ladder, the minimum order, the quote,
+variants, images, seller. One data-source call per listing.
+
+**Listing level** sells the search results themselves — title, price, sales,
+image — which is what you need to shortlist a hundred candidates. One call
+returns a whole page, so it costs a fraction. Set `detailLevel` to `listing`
+and give a `keyword`.
+
+The usual shape of the work is both: shortlist wide and cheap at listing level,
+then re-run the handful you care about at full detail. Listing-level records
+carry `status: "listed"` rather than `"ok"`, and the fields a search result
+cannot carry — the ladder, variants, minimum order — come back empty, not
+null, so absent-from-search stays distinguishable from the-listing-was-silent.
 
 ---
 
@@ -137,123 +94,76 @@ as a span across variants has no single unit price to resolve to, so
 
 | Field | Type | Description |
 |---|---|---|
-| `itemIds` | array | Taobao / Tmall item ids or 1688 offer ids. Pasting a full listing URL here works too — the id is read out of it rather than sent upstream as-is. |
-| `itemUrls` | array | Listing URLs instead; the id is read out of the URL. |
-| `keyword` | string | Search the catalogue instead of naming ids. |
-| `platform` | enum | `taobao`, `tmall` or `1688`. |
+| `itemIds` | array | 1688 offer ids. A pasted listing URL works too. |
+| `itemUrls` | array | 1688 listing URLs; the offer id is read out of each. |
+| `keyword` | string | Search 1688, in Chinese or English. Required for listing level. |
+| `detailLevel` | enum | `full` fetches each listing; `listing` sells the search results, far cheaper. |
+| `quantity` | integer | Price every listing at this many pieces. |
 | `maxProducts` | integer | Hard cap. Each listing returned with data is one billable event. |
-| `quantity` | integer | Price every listing at this many pieces: unit price off the ladder, subtotal, which tier, and whether it clears the MOQ. |
-| `concurrency` | integer | Listings fetched in parallel, 1–10. Default 5. |
-| `includeSkus` | boolean | Off keeps records small and returns the listing level only. `skuCount` still reports how many variants there were. |
+| `includeSkus` | boolean | Off keeps records small. `skuCount` still says how many variants there were. |
+| `concurrency` | integer | Listings fetched in parallel, 1–10. |
 
-### Example input
+### Example
 
 ```json
 {
-  "itemIds": ["612345678901"],
-  "platform": "1688",
+  "keyword": "T恤 批发",
   "quantity": 500,
-  "maxProducts": 10,
-  "includeSkus": true
+  "maxProducts": 20
 }
 ```
 
 ---
 
-## Two detail levels
-
-**Full detail** fetches each listing: SKU matrix, wholesale ladder, shipping
-terms, seller scores. One provider call per listing, and it bills accordingly.
-
-**Listing level** sells the search response itself — title, price, sales line
-with its window and unit, seller, image, discount — which is what you actually
-need to shortlist a hundred candidates. One provider call returns a whole page
-of them, so it costs a fraction. Set `detailLevel` to `listing` and give a
-`keyword`.
-
-The normal shape of the work is both: shortlist wide and cheap at listing
-level, then re-run the handful you care about at full detail.
-
-Records from the cheap path carry `status: "listed"` rather than `"ok"`, so you
-can always tell which is which. The fields a search hit cannot carry —
-`skus`, `priceTiers`, `shipping`, `shopScores`, `stock` — come back empty
-rather than null, because absent-from-this-endpoint is not the same as
-the-listing-did-not-say.
-
-## Throughput
-
-About **280 listings a minute** at the defaults (5 in parallel, requests spaced
-0.2s apart), measured against a 300 ms provider round-trip. Raise `concurrency`
-to 10 and lower the interval if your provider plan allows it; lower both if it
-does not. Request spacing is enforced across all workers, not per worker, so
-raising concurrency cannot overrun a rate limit on its own.
-
 ## Pricing
 
-Pay per event — you pay for listings actually returned.
+Pay per event — you pay for records actually returned.
 
 | Event | When it fires |
 |---|---|
-| `product-normalised` | A listing returned with full normalised fields. |
-| `product-listed` | A record built from a search hit, in listing mode. Far cheaper: one provider call returns a whole page. |
+| `product-normalised` | A listing returned at full detail. |
+| `product-listed` | A record built from a search result, at listing level. |
 
-**You are not charged** for a listing that does not exist, that the platform
-refused, or whose payload did not fit. Those come back with a `status` saying
-which, at no cost. Set a max total charge on the run and the Actor stops
-cleanly at the limit instead of running past it.
+**You are not charged** for an id that does not exist, that the data source
+refused, or whose data could not be read. Those come back with a `status`
+saying which, at no cost. An entry in the ids field with no id in it is skipped
+before any call is made. Set a max total charge on the run and the Actor stops
+cleanly at the limit.
 
 ## Limits — read before you buy
 
-Stated plainly, because they affect whether this fits your workflow:
-
-- **`titleEn` and `optionsEn` are usually `null`.** Listings do not print an
-  English title, and this Actor does not invent one. Anything the listing does
-  not state comes back `null` rather than guessed.
-- **`面议` ("price on request") yields a null price**, not a zero and not a
-  made-up number. The source text is kept.
-- **`keyword` searches the catalogue's own index**, with its ranking and its
-  result cap — not a full-text search of every listing.
-- **Not every listing has every field.** Wholesale ladders and minimum order
-  quantities are a 1688 concept; seller scores are a Taobao one, and not every
-  data source publishes them — when they are absent, `shopScores` is `[]`
-  rather than zeros.
-- **`stock` is approximate and says so.** The platform publishes a rounded
-  figure, not a count, so the field is `{value, isApproximate, sourceTextCn}`
-  with `isApproximate` true. Treat it as an order of magnitude.
-- **A price span with a null `sourceTextCn` was derived**, not quoted: it is
-  the min and max of the listing's own SKU prices, because the listing did not
-  print a range. A span with source text was printed as a range.
-- **Shipping is read from the listing record**, not fetched separately. Where
-  the listing does not carry it, `shipping` is `null` rather than guessed.
-- **An entry with no id in it is skipped, not requested.** You get a warning
-  naming it. Sending it upstream would be a billed call for a certain miss.
-- **An overlapping wholesale ladder quotes the dearer matching rung.** Some
-  listings publish rungs that overlap, and then nothing says which the seller
-  means; understating what an order costs is the harmful way to be wrong.
-  A quantity matching no rung at all falls back to the listing price with
-  `tierSourceTextCn` null.
-- **Listings the platform refuses are reported, not retried into oblivion.**
-  A `risk_control_blocked` status means the platform declined that id for this
-  request. It is not billed.
-- Figures are read from the listing as published. The listing remains the
-  authoritative source, which is why every record links back to it.
+- **1688 only, for now.** Taobao and Tmall are planned. Asking for them today
+  is refused before any work is done rather than returning empty records.
+- **`sourceTextCn` is often `null`, and that is deliberate.** The field holds
+  the Chinese text a value was read from, where there was text. Most figures
+  here arrive as typed numbers rather than listing text, and for those there is
+  nothing to quote verbatim — so the field is `null` rather than a number
+  dressed up as a citation.
+- **`titleEn` is the data source's rendering**, not this Actor's translation,
+  and may be absent.
+- **`stock` is flagged `isApproximate`** unless the data source is known to
+  report an exact count. Treat it as an order of magnitude.
+- **A quote is arithmetic on published prices.** It does not include shipping,
+  which most 1688 listings settle per order with the seller.
+- **Listings are read as published.** The listing remains the authoritative
+  source, which is why every record links to it.
 
 ## Data source and compliance
 
-Public product and shop listing data only: titles, prices, stock, shipping
-terms, SKU options, shop names and the shop's own published scores. **No buyer
-identities, no reviewer names, no contact details, no personal data.** Requests
-are rate limited by default, and the interval can be raised but not removed.
+Public product and supplier listing data only: titles, prices and ladders,
+minimum orders, variants, images, supplier name. **No buyer identities, no
+reviewer names, no contact details, no personal data.** Data is obtained
+through a licensed commercial product-data API, not by circumventing the
+platform's access controls. Requests are rate limited.
 
 ---
 
-*Keywords: Taobao scraper, Taobao product API, Tmall product data, 1688
-wholesale scraper, China product sourcing data, Taobao product details API,
-Taobao price monitoring, 1688 supplier data, Chinese e-commerce data,
-阶梯价 wholesale tiers, Taobao SKU data.*
+*Keywords: 1688 scraper, 1688 API, 1688 wholesale price, Alibaba 1688 product
+data, 1688 tiered pricing, 阶梯价, 起订量, China wholesale sourcing data, 1688
+supplier data, 1688 MOQ, bulk order quote.*
 
 ---
 
-Running it locally or contributing? See [DESIGN.md](DESIGN.md) for why the
-acquisition layer looks the way it does, and [VALIDATION.md](VALIDATION.md)
-for how the field map gets checked against a live provider.
+Running it locally or contributing? See [DESIGN.md](DESIGN.md) for how the data
+path is structured, and [VALIDATION.md](VALIDATION.md) for how the field maps
+are checked against the live data source.

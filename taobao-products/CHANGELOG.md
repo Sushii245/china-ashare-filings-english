@@ -2,11 +2,31 @@
 
 ## 0.1 — unreleased
 
-First build. Not published yet: the acquisition layer needs a product-data
-provider configured (see DESIGN.md for why there is no login-free path).
+First build. Not published yet: the data source's field maps are written from
+a real response first (VALIDATION.md).
 
-- Taobao, Tmall and 1688 listings as typed records. Input by item id, by
-  listing URL, or by search keyword.
+- 1688 listings as typed records, through the OTAPI 1688 data source on
+  RapidAPI. Input by offer id, by listing URL, or by search keyword. Taobao and
+  Tmall are planned through a second data source; asking for them today is
+  refused before any work is done.
+- Everything specific to a data source — paths, auth style, paging, id format,
+  error reporting, where search hits live, field maps — travels with the
+  source, and every stage reads it from there.
+- 1688 ids are written `abb-…` by the data source. The prefix is added to each
+  request and stripped from everything returned, so records, URLs and inputs
+  only ever carry the platform's own offer id.
+- A listing is never mistaken for a platform refusal. Refusal markers used to
+  be matched against the whole response, and 滑块 is also a large 1688
+  category, so linear-guide slider listings came back as refused and empty.
+- Typed wholesale ladders are read, including rungs that give only a starting
+  quantity, each closed by the next rung's start. Values in name/value lists
+  are addressed by name. Facts a typed value cannot state — a sales figure's
+  window, whether stock is exact — come from the data source's hints.
+- `titleCn` and `titleEn` are kept apart, and a title with no Chinese in it is
+  never put in `titleCn`.
+- `sourceTextCn` is filled where a value was read from listing text and null
+  where it arrived as a typed number, including a number that merely arrived
+  as a string.
 - Prices parsed as spans, not strings: a listing showing `128.00-298.00`
   returns `value` 128 and `valueMax` 298, with the original text kept.
 - Sales figures carry their meaning. `月销1000+` and `已售2万+` are both
