@@ -308,3 +308,76 @@ def test_concurrent_fetches_all_succeed():
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(client.fetch_product, [str(i) for i in range(24)]))
     assert all(r.status == "ok" for r in results)
+
+
+# ------------------------------------------------- header auth / offset paging
+
+def test_header_credentials_never_reach_the_query_string():
+    config = source_mod.SourceConfig(
+        base_url="https://provider.example",
+        auth_headers={"X-RapidAPI-Key": "secret-key", "X-RapidAPI-Host": "h"},
+        min_interval=0.0, max_retries=0, backoff_base=0.0,
+    )
+    client = source_mod.UpstreamSource(config)
+    sent = FakeSession([FakeResponse(body=OK_BODY)])
+    sent.headers = dict(client.session.headers)
+    client.session = sent  # type: ignore[assignment]
+    client.fetch_product("1")
+    _, params = sent.calls[0]
+    assert "X-RapidAPI-Key" not in params
+    assert "secret-key" not in str(params)
+
+
+def test_the_preset_sets_the_headers_on_the_session():
+    config = source_mod.otapi_1688_config("my-key")
+    client = source_mod.UpstreamSource(config)
+    assert client.session.headers["X-RapidAPI-Key"] == "my-key"
+    assert client.session.headers["X-RapidAPI-Host"] == "otapi-1688.p.rapidapi.com"
+
+
+@pytest.mark.parametrize(
+    "page,offset",
+    [(1, 0), (2, 50), (3, 100), (10, 450)],
+)
+def test_offset_paging_multiplies_by_the_frame_size(page, offset):
+    # framePosition is a zero-based item offset. Sending the page number
+    # instead returns the second item onwards, not the second page, and
+    # nothing about the response says so.
+    config = source_mod.otapi_1688_config("k", page_size=50)
+    config.min_interval = 0.0
+    config.max_retries = 0
+    config.backoff_base = 0.0
+    client = source_mod.UpstreamSource(config)
+    client.session = FakeSession([FakeResponse(body='{"items": []}')])  # type: ignore[assignment]
+    client.search_raw("耳机", page=page)
+    _, params = client.session.calls[0]
+    assert params["framePosition"] == offset
+    assert params["frameSize"] == 50
+    assert "page" not in params
+
+
+def test_the_preset_sends_the_required_language_and_keyword_names():
+    config = source_mod.otapi_1688_config("k")
+    config.min_interval = 0.0
+    config.max_retries = 0
+    config.backoff_base = 0.0
+    client = source_mod.UpstreamSource(config)
+    client.session = FakeSession([FakeResponse(body='{"items": []}')])  # type: ignore[assignment]
+    client.search_raw("蓝牙耳机")
+    _, params = client.session.calls[0]
+    assert params["language"] == "en"        # required on every OTAPI call
+    assert params["ItemTitle"] == "蓝牙耳机"  # not the generic "q"
+
+
+def test_the_preset_leaves_the_field_map_empty_on_purpose():
+    # Guessing it would produce fields that read as present and are not. It is
+    # written from a real response by capture.py + audit.py.
+    assert source_mod.otapi_1688_config("k").field_map == {}
+
+
+def test_a_page_param_provider_still_pages_by_page():
+    client = build([FakeResponse(body='{"items": []}')])
+    client.search_raw("x", page=4)
+    _, params = client.session.calls[0]
+    assert params["page"] == 4
+    assert "framePosition" not in params

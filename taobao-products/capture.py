@@ -33,6 +33,11 @@ DEFAULT_DIR = Path(__file__).parent / "tests" / "fixtures" / "live"
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("item_ids", nargs="*", help="listing ids to capture")
+    parser.add_argument(
+        "--provider", choices=sorted(source_mod.PROVIDER_PRESETS),
+        help="use a built-in provider preset instead of --base-url (handles that "
+             "provider's auth style, paging and required parameters)",
+    )
     parser.add_argument("--base-url", default=os.environ.get("SOURCE_BASE_URL"))
     parser.add_argument("--api-key", default=os.environ.get("SOURCE_API_KEY"))
     parser.add_argument("--api-secret", default=os.environ.get("SOURCE_API_SECRET"))
@@ -66,9 +71,12 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
-    if not args.base_url or not args.api_key:
+    if not args.api_key:
+        print("need --api-key (or SOURCE_API_KEY)", file=sys.stderr)
+        return 2
+    if not args.provider and not args.base_url:
         print(
-            "need --base-url and --api-key (or SOURCE_BASE_URL / SOURCE_API_KEY)",
+            "need --provider, or --base-url (or SOURCE_BASE_URL)",
             file=sys.stderr,
         )
         return 2
@@ -76,20 +84,24 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    config = source_mod.SourceConfig(
-        base_url=args.base_url,
-        api_key=args.api_key,
-        api_secret=args.api_secret or None,
-        cache=args.cache,
-        lang=args.lang,
-        max_retries=args.retries,
-        min_interval=1.0,          # unhurried: this is a one-off, not a run
-    )
+    if args.provider:
+        config = source_mod.PROVIDER_PRESETS[args.provider](args.api_key)
+        config.max_retries = args.retries
+    else:
+        config = source_mod.SourceConfig(
+            base_url=args.base_url,
+            api_key=args.api_key,
+            api_secret=args.api_secret or None,
+            cache=args.cache,
+            lang=args.lang,
+            max_retries=args.retries,
+        )
+        if args.platform == "1688":
+            config.detail_path = "/1688/item_get"
+            config.search_path = "/1688/item_search"
+    config.min_interval = 1.0      # unhurried: this is a one-off, not a run
     if args.detail_path:
         config.detail_path = args.detail_path
-    elif args.platform == "1688":
-        config.detail_path = "/1688/item_get"
-        config.search_path = "/1688/item_search"
 
     client = source_mod.UpstreamSource(config, platform=args.platform)
 

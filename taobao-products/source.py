@@ -95,6 +95,19 @@ class SourceConfig:
     #: Where supported, asks the provider for an English rendering of the
     #: listing text. Costs nothing extra and fills titleEn when it works.
     lang: str | None = None
+    #: Credentials that belong in headers rather than the query string.
+    #: RapidAPI-fronted providers authenticate this way.
+    auth_headers: dict[str, str] = dataclasses.field(default_factory=dict)
+    #: Some providers page by a zero-based offset rather than a page number
+    #: (OTAPI's framePosition). When set, the offset is sent under this name,
+    #: computed as (page - 1) * page_size, and page_param is not sent.
+    offset_param: str | None = None
+    page_size_param: str | None = None
+    page_size: int = 50
+    #: Extra query parameters every call needs, e.g. OTAPI's required
+    #: ``language``. Kept apart from extra_params so a provider preset can set
+    #: them without clobbering a caller's own additions.
+    required_params: dict[str, str] = dataclasses.field(default_factory=dict)
     detail_path: str = "/taobao/item_get"
     search_path: str = "/taobao/item_search"
     item_id_param: str = "num_iid"
@@ -279,6 +292,10 @@ class UpstreamSource:
                 "User-Agent": "apify-taobao-products/0.1",
             }
         )
+        # Header credentials are set once on the session so they are never at
+        # risk of being logged with the query string.
+        if config.auth_headers:
+            self.session.headers.update(config.auth_headers)
 
     # ------------------------------------------------------------------ plumbing
 
@@ -296,7 +313,8 @@ class UpstreamSource:
             self._last_request = time.monotonic()
 
     def _params(self, **extra: Any) -> dict[str, Any]:
-        params: dict[str, Any] = dict(self.config.extra_params)
+        params: dict[str, Any] = dict(self.config.required_params)
+        params.update(self.config.extra_params)
         if self.config.api_key:
             params[self.config.key_param] = self.config.api_key
         if self.config.api_secret:
@@ -389,6 +407,22 @@ class UpstreamSource:
             )
         return RawProduct(item_id=item_id, platform=self.platform, payload=payload)
 
+    def _paging_params(self, page: int) -> dict[str, Any]:
+        """Page or offset, whichever the provider speaks.
+
+        OTAPI's framePosition is a zero-based item offset, not a page number,
+        so asking for "page 2" without multiplying by the frame size silently
+        returns the second item onwards rather than the second page.
+        """
+        if self.config.offset_param:
+            params: dict[str, Any] = {
+                self.config.offset_param: (page - 1) * self.config.page_size
+            }
+            if self.config.page_size_param:
+                params[self.config.page_size_param] = self.config.page_size
+            return params
+        return {self.config.page_param: page}
+
     def search(self, keyword: str, *, page: int = 1) -> list[str]:
         """Return item ids for one page of results."""
         ids: list[str] = []
@@ -406,7 +440,7 @@ class UpstreamSource:
         page of records, where fetching each listing in full is one call each.
         """
         params = self._params(
-            **{self.config.keyword_param: keyword, self.config.page_param: page}
+            **{self.config.keyword_param: keyword, **self._paging_params(page)}
         )
         payload = self._get(self.config.search_path, params)
         # Explicitly None, not falsy: an empty result page is a list, and
@@ -423,6 +457,42 @@ class UpstreamSource:
         if not isinstance(items, list):
             return []
         return [entry for entry in items if isinstance(entry, dict)]
+
+
+def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
+    """Preset for the RapidAPI-fronted OTAPI 1688 service.
+
+    Differs from a query-string provider in three ways that each break a call
+    silently rather than loudly: the credentials are headers, the paging is a
+    zero-based item offset under ``framePosition``, and ``language`` is
+    required on every request.
+
+    The field map is left empty on purpose. It is written from a real response
+    via ``capture.py`` and ``audit.py``; guessing it would only produce fields
+    that read as present and are not.
+    """
+    host = "otapi-1688.p.rapidapi.com"
+    return SourceConfig(
+        base_url=f"https://{host}",
+        api_key=None,
+        auth_headers={"X-RapidAPI-Key": api_key, "X-RapidAPI-Host": host},
+        detail_path="/Get item",
+        search_path="/Search for items",
+        item_id_param="itemId",
+        keyword_param="ItemTitle",
+        offset_param="framePosition",
+        page_size_param="frameSize",
+        page_size=page_size,
+        required_params={"language": "en"},
+        # RapidAPI's listed latency for this API is ~2.5s, so the spacing can
+        # be small: the round-trip is the limit, not the rate.
+        min_interval=0.1,
+        field_map={},
+    )
+
+
+#: Presets by name, for ``capture.py --provider``.
+PROVIDER_PRESETS = {"otapi-1688": otapi_1688_config}
 
 
 def build_source(

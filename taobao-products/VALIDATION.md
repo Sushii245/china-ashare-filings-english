@@ -1,95 +1,86 @@
 # Validating the field map against a live provider
 
-The field map was written against OneBound's documentation, not against a
-response. Until a real payload has been through `audit.py`, every claim in the
-README is a claim about the docs.
+The normalisation layer is finished and tested against payloads I wrote. What
+is *not* established is the shape of a real provider response, so until one has
+been through `audit.py`, every field claim in the README is a claim about
+documentation.
 
-Calls are billed at 0.022 元 each, so the discipline is: **fetch each distinct
-case once, save it, and do everything else offline.**
+**Provider: OTAPI 1688, via RapidAPI.** Chosen over OneBound for three reasons:
+a free tier that makes validation cost nothing and is renewable daily; $25/month
+stoppable rather than a 1,000 元 prepayment that expires in a year; and a
+cheaper effective call rate inside the included quota. The cost is coverage —
+this listing is **1688 only**, with no Taobao. That is an acceptable trade
+because the wholesale ladder, the minimum order quantity and the
+quantity-aware quote are 1688 concepts: the Actor's strongest differentiator
+only applies where this provider works. Taobao is a later addition through
+OneBound, once there is revenue to justify the prepayment.
 
-The account's free test allowance reads as **5 calls**, so the plan below is
-five, chosen to cover what seven covered by picking one listing that carries
-three of the questions at once. Topping up is not a small step — the provider's
-minimum is **1,000 元** and a balance expires after a year — so validating
-inside the free allowance is worth the care.
+## The tiers
 
----
+| Plan | $/mo | Included | Effective per call | Overage | Bandwidth |
+|---|---|---|---|---|---|
+| **Basic** | **$0** | **20/day** | — | $0.008 | 10,240 MB/mo, then $0.001/MB |
+| Pro | $25 | 900/day | $0.000926 | $0.005 | same |
+| Ultra | $150 | 5,500/day | $0.000909 | $0.003 | same |
+| Mega | $350 | 15,000/day | $0.000778 | $0.001 | same |
 
-## Phase 0 — before spending anything
+Validation fits inside Basic. At $0.012 a product the Pro tier leaves a 72%
+margin and pays for itself after about 2,900 products a month.
 
-- [ ] **Complete 实名认证** (个人中心 → 实名认证). Mandatory since 2026-07-07
-      under China's Cybersecurity Law; without it the provider suspends account
-      management. **Individual verification is accepted** — personal details
-      plus both sides of an ID card — so no company entity is needed.
-- [ ] **Check the free allowance and its expiry** on the console. It reads as
-      5 calls against an order valid to a date a few days out, so confirm both
-      before planning around them.
-- [ ] **Confirm the price list is still current.** The one this project is
-      costed against is dated 2026-06-26. Ask for A-class `item_get` per-call
-      and monthly rates in writing.
-- [ ] **Ask specifically whether 1688 `item_get` bills as A-class.** The
-      platform matrix shows 淘宝 / 天猫 / 1688 all supported on one interface,
-      but the per-interface price table only itemises `taobao.item_get`. If
-      1688 is billed higher, the margin model needs redoing for it.
-- [ ] **Confirm whether `secret` is required** alongside `key`, and the exact
-      base URL and paths. The docs give `https://api-gw.onebound.cn` and
-      `/taobao/item_get`.
-- [ ] Do **not** enable `item_fee`. It is B-class at 0.05 元, 2.3x the item
-      call, and the margin model goes negative if shipping needs it. Call 2
-      below is what decides whether that is ever necessary.
+## Phase 0 — sign up (0 calls)
 
-## Phase 1 — pick the seven targets (0 calls)
+- [ ] Subscribe to **Basic** on
+      `rapidapi.com/open-trade-commerce-open-trade-commerce-default/api/otapi-1688`.
+      RapidAPI asks for a card even on the free plan; Basic itself bills nothing.
+- [ ] Copy the **X-RapidAPI-Key**. The host is `otapi-1688.p.rapidapi.com`.
+- [ ] Note the listed latency, ~2.5 s. The throughput figures in the README were
+      measured against a 300 ms round-trip and will need redoing.
 
-Open each listing in a browser first and confirm with your own eyes that it has
-the feature, then copy the id out of the URL (`item.htm?id=…`, or
-`/offer/….html` on 1688). Picking deliberately is what keeps this to 7 calls
-instead of 30.
+## Phase 1 — already done
 
-| # | Pick a listing that… | What the call settles |
-|---|---|---|
-| 1 | is on **Taobao**, is **包邮**, shows **月销 N+**, and whose **variants differ in price** — all three on one listing, which is common | **The margin question**: does `post_fee` come back in the item record? Plus whether the sales field is populated and in what wording; whether `price_range` exists at all; the real shape of `skus.sku` and `props_list` |
-| 2 | is on **1688**, with a visible **阶梯价 ladder** and a **起订量** | `price_ranges` and `min_num` shapes; whether 1688 answers on the same interface and bills as A-class |
-| 3 | is a **bogus id** — just use `1` | The error shape: `error`, `error_code`, and whether the `"0000"`-is-success logic and the risk-control classification hold |
-| 4 | — a **search**, not an item | The search response shape, id extraction, and whether a hit carries enough for listing mode to sell |
-| 5 | is on **Tmall**, or is **预售** — whichever you care about more | Whether Tmall differs from Taobao here and whether shop scores appear; or whether `presale_text` exists |
+`source.py` carries an `otapi-1688` preset handling the three things that each
+break a call quietly rather than loudly:
 
-Finding one listing that satisfies #1 entirely is the single highest-value
-minute of this exercise. Write the ids down before you start.
+* credentials go in **headers**, not the query string, and are set on the
+  session so they cannot be logged with a URL;
+* paging is a **zero-based item offset** (`framePosition`), computed as
+  `(page - 1) * frameSize` — sending the page number returns the second *item*
+  onwards, not the second page, and nothing in the response says so;
+* `language` is **required on every call**.
 
-## Phase 2 — capture (7 calls)
+The preset's `field_map` is deliberately **empty**. Phase 3 writes it from a
+real response. Guessing it would produce fields that read as present and are
+not, which is the failure this whole exercise exists to avoid.
 
-Export the credentials once so they stay out of your shell history:
+## Phase 2 — capture (about 6 of the 20 free daily calls)
 
 ```
 read -rs SOURCE_API_KEY && export SOURCE_API_KEY
-read -rs SOURCE_API_SECRET && export SOURCE_API_SECRET
-export SOURCE_BASE_URL=https://api-gw.onebound.cn
 ```
 
-Then the Taobao items, the bogus id and the search — **four calls**:
+**Start with the search.** It is the highest-value single call: it returns the
+entire listing-mode shape *and* up to 50 real item ids, so there is no hunting
+for ids in a browser first.
 
 ```
-python capture.py --platform taobao --search 蓝牙耳机 <id1> <id5> 1
+python capture.py --provider otapi-1688 --platform 1688 --search 蓝牙耳机
 ```
 
-And the 1688 offer — **one call**:
+Read `tests/fixtures/live/_search.json`, pick three ids — ideally ones whose
+titles suggest wholesale (批发 / 厂家 / 现货) so a 阶梯价 ladder is likely —
+then fetch them plus a bogus id:
 
 ```
-python capture.py --platform 1688 <id2>
+python capture.py --provider otapi-1688 --platform 1688 <id1> <id2> <id3> 1
 ```
 
-What keeps this from leaking calls:
+Five calls so far, and the allowance renews daily, so being thorough costs
+nothing. What keeps it honest anyway: `--retries 0` is the default, and
+`capture.py` refuses to re-fetch an id already on disk unless `--force`.
 
-- `--retries 0` is the default, because a retry is another billed call.
-- `--cache yes` is the default. A repeat of the same id may be served from the
-  provider's cache rather than billed again, so leave it on while validating.
-- `capture.py` **refuses to re-fetch an id already on disk** unless you pass
-  `--force`.
-- **Never run `actor_main` against the live provider during validation.** Its
-  defaults are 10 listings, 5 at a time — one careless run is 10 calls.
-  `capture.py` is the only thing that should touch the network here.
-
-The script prints how many calls it billed. Check that number matches.
+**Do not point `actor_main` at the live provider yet.** Its defaults are ten
+listings five at a time; `capture.py` is the only thing that should touch the
+network here.
 
 ## Phase 3 — audit (0 calls)
 
@@ -97,64 +88,71 @@ The script prints how many calls it billed. Check that number matches.
 python audit.py tests/fixtures/live
 ```
 
-For every payload it prints three things: which mapped paths resolved and which
-came back `MISSING`, what is in the payload that the map does not read yet
-(with values, so you can judge), and the record a buyer would receive.
+With an empty field map every mapped path will read `MISSING` — that is
+expected, and the section that matters is **"in the payload but not read"**,
+which lists what the response actually contains, with values.
 
-Read it looking for:
+Write the map from that list, looking for:
 
-- [ ] **`shipping` MISSING on call 1.** If `post_fee` is not in the item
-      record, shipping cannot be returned without the B-class call, and the
-      honest move is to drop the field and say so in the README — not to pay
-      0.05 元 per product for it.
-- [ ] **`sales` MISSING or useless.** The provider sample showed `total_sold`
-      blank and `sales` as `"1"`. Sales semantics is the headline
-      differentiator, so if the real field is thin, check `total_sold` and
-      whatever the unread-keys list offers, and if nothing carries it, the
-      README's lead has to change.
-- [ ] **`shop_scores` MISSING.** Expected — the docs do not define it. Check
-      the unread keys for `seller_info` / `shopinfo` subfields that do.
-- [ ] **`price_range` MISSING.** Expected. Confirm the SKU-derived span in the
-      "what the buyer would receive" block looks right.
-- [ ] **`tiers` on the 1688 call.** If `price_ranges` is missing, the whole `quote`
-      feature has nothing to walk. Look hard at the unread keys for the ladder
-      under another name.
-- [ ] **Unread keys worth adding.** `promo_type`, `favcount`, review counts,
-      delivery-time fields — anything a sourcing buyer would act on.
-- [ ] **The bogus id's error shape.** Confirm `error_code` is not `"0000"` and that
-      the record came out `upstream_error`, not `ok`.
+- [ ] **The item id, title and price.** The minimum for any record.
+- [ ] **The 阶梯价 ladder.** OTAPI calls configurations and price breaks
+      something of its own; without it the `quote` feature has nothing to walk
+      and the main differentiator is gone. Look hard before concluding it is
+      absent.
+- [ ] **The minimum order quantity.** Same reasoning.
+- [ ] **Sales / order volume.** `MinVolume` is a search filter, so the figure
+      exists somewhere. Its wording decides whether the sales-semantics
+      promise survives — and whether an English-language response still carries
+      a Chinese source string to cite, which the whole citation contract
+      depends on.
+- [ ] **Vendor ratings**, for `shopScores`.
+- [ ] **The SKU / configuration array**, and whether its axes are named.
+- [ ] **Shipping.** If it needs the separate vendor or description call, that is
+      a second billed call per product — price it before adding it.
+- [ ] **`language=en` effects.** If the provider returns English titles, they
+      must not land in `titleCn`. A field named for Chinese holding English is
+      worse than a null.
+- [ ] **The bogus id's error shape**, so the status classification is right.
 
-## Phase 4 — fix and lock in (0 calls)
+## Phase 4 — write it down (0 calls)
 
-1. Correct `field_map` in `source.py` for each `MISSING` entry, using the real
-   path from the unread-keys list.
-2. Promote the useful payloads: copy them from `tests/fixtures/live/` into
-   `tests/fixtures/`. `live/` is gitignored on purpose — moving a payload into
-   the suite should be a decision, not a side effect.
-3. Write a test per surprise. Every difference between the docs and the
-   response is a bug the next provider change can reintroduce.
+1. Fill `field_map` in `otapi_1688_config`.
+2. Copy the useful payloads from `tests/fixtures/live/` into `tests/fixtures/`.
+   `live/` is gitignored on purpose: promoting one should be a decision.
+3. A test per surprise. Every gap between the documentation and the response is
+   a bug the next provider change can reintroduce.
 4. `python -m pytest tests/ -q`
 
-## Phase 5 — one end-to-end replay (0 calls)
+## Phase 5 — replay end to end (0 calls)
 
 ```
 ACTOR_SOURCE_FIXTURES=tests/fixtures/live python -m actor_main
 ```
 
-This runs the real Actor against the real payloads with no network. Check the
-dataset records, then check that the refused and bogus ids came back with a
-`status` and **were not billed**.
+The real Actor against real payloads, no network. Check the records, then check
+that the bogus id came back with a status and **was not billed**.
 
-## Before publishing — the default input
+## Before publishing
 
-`input_schema.json` prefills `itemIds` with `600530677383`, which I made up
-while writing the fixtures. Apify runs a published Actor every day against its
-default input and flags it as under maintenance after repeated empty or failed
-runs, so **replace that prefill with an id you verified in Phase 1** before the
-Actor goes public. A cheaper default is `detailLevel: "listing"` with a keyword
-prefill: one call, and it cannot go stale the way a single id can.
+- [ ] Re-measure throughput against the real ~2.5 s latency and correct the
+      README. Five workers at that latency is nowhere near 284 a minute.
+- [ ] **Replace the prefilled item id.** `input_schema.json` prefills
+      `600530677383`, which I invented while writing fixtures. Apify runs a
+      published Actor against its default input daily and flags it as under
+      maintenance after repeated empty or failed runs. Use a verified id, or
+      default to `detailLevel: "listing"` with a keyword — one call, and it
+      cannot go stale the way a single id can.
+- [ ] **Re-point the positioning to 1688.** The README leads with Taobao, and
+      on this provider the Actor does not do Taobao. Leading with a platform it
+      cannot serve is the fastest route to a one-star review.
+- [ ] Set `SOURCE_API_KEY` as an Actor secret, and run on the platform with
+      `maxProducts: 2` before anything larger.
 
-## Only then
+## Later: adding Taobao
 
-Set `SOURCE_BASE_URL` and `SOURCE_API_KEY` as Actor secrets, push the build,
-and run it on the platform with `maxProducts: 2` before anything larger.
+OneBound (`api-gw.onebound.cn`) covers Taobao, Tmall and 1688 on one interface
+at 0.022 元 a call, but the minimum top-up is 1,000 元 and a balance expires
+after a year. Its account also needs 实名认证 — individual verification is
+accepted, so no company entity is required. Revisit once 1688 revenue covers
+the prepayment, and keep both providers behind the same `ProductSource`
+protocol so it stays a config change.
