@@ -114,6 +114,15 @@ plan (0.01 元, a 52% to 67% margin improvement) because the monthly plan is a
 one-year commitment at 1,500 元/month and breaks even only above ~27,800
 products a month. Revisit once monthly volume is reliably past that.
 
+Pay-as-you-go is not, however, free of fixed cost: **the provider's minimum
+top-up is 1,000 元** (~$149) and **a balance expires after one year**. So the
+real shape is a $149 prepayment buying ~45,000 calls, which the detail tier
+pays back after ~23,800 products sold, or the listing tier after ~101,000
+records. Both are reachable, but the outlay is real and it is use-it-or-lose-it,
+which argues for launching both tiers at once rather than detail alone: the
+cheap tier burns the balance far more slowly per record and is the one a new
+buyer tries first.
+
 Listing mode changes the shape of that. A search call costs the same 0.022 元
 but returns a whole page, so at 40 hits a page the upstream cost is $0.000082
 per record. Priced at $0.002 that is a **73% margin** — better than full

@@ -5,15 +5,25 @@ response. Until a real payload has been through `audit.py`, every claim in the
 README is a claim about the docs.
 
 Calls are billed at 0.022 元 each, so the discipline is: **fetch each distinct
-case once, save it, and do everything else offline.** The whole plan below
-costs **7 calls — about 0.15 元, under $0.03.**
+case once, save it, and do everything else offline.**
+
+The account's free test allowance reads as **5 calls**, so the plan below is
+five, chosen to cover what seven covered by picking one listing that carries
+three of the questions at once. Topping up is not a small step — the provider's
+minimum is **1,000 元** and a balance expires after a year — so validating
+inside the free allowance is worth the care.
 
 ---
 
 ## Phase 0 — before spending anything
 
-- [ ] **Check the free test quota.** Providers in this space usually grant a
-      trial allowance on signup. If one exists, Phase 2 costs nothing.
+- [ ] **Complete 实名认证** (个人中心 → 实名认证). Mandatory since 2026-07-07
+      under China's Cybersecurity Law; without it the provider suspends account
+      management. **Individual verification is accepted** — personal details
+      plus both sides of an ID card — so no company entity is needed.
+- [ ] **Check the free allowance and its expiry** on the console. It reads as
+      5 calls against an order valid to a date a few days out, so confirm both
+      before planning around them.
 - [ ] **Confirm the price list is still current.** The one this project is
       costed against is dated 2026-06-26. Ask for A-class `item_get` per-call
       and monthly rates in writing.
@@ -37,15 +47,14 @@ instead of 30.
 
 | # | Pick a listing that… | What the call settles |
 |---|---|---|
-| 1 | is on **Taobao** and whose **variants differ in price** (e.g. 颜色/版本 at different prices) | Whether `price_range` exists at all; whether the SKU-derived span works on real data; the real shape of `skus.sku` and `props_list` |
-| 2 | is **包邮** and shows **月销 N+** | **The margin question**: does `post_fee` actually come back in the item record? And is the sales field populated, in what wording? |
-| 3 | is **预售** with a stated dispatch window | Whether `presale_text` exists and what it looks like |
-| 4 | is on **1688**, with a visible **阶梯价 ladder** and a **起订量** | `price_ranges` and `min_num` shapes; whether 1688 answers on the same interface |
-| 5 | is a **bogus id** — just use `1` | The error shape: `error`, `error_code`, and whether the `"0000"`-is-success logic and the risk-control classification hold |
-| 6 | is on **Tmall** (a 天猫 listing, not a 淘宝 one) | Whether Tmall differs from Taobao in this response, and whether shop scores appear |
-| 7 | — a **search**, not an item | The search response shape and whether id extraction works |
+| 1 | is on **Taobao**, is **包邮**, shows **月销 N+**, and whose **variants differ in price** — all three on one listing, which is common | **The margin question**: does `post_fee` come back in the item record? Plus whether the sales field is populated and in what wording; whether `price_range` exists at all; the real shape of `skus.sku` and `props_list` |
+| 2 | is on **1688**, with a visible **阶梯价 ladder** and a **起订量** | `price_ranges` and `min_num` shapes; whether 1688 answers on the same interface and bills as A-class |
+| 3 | is a **bogus id** — just use `1` | The error shape: `error`, `error_code`, and whether the `"0000"`-is-success logic and the risk-control classification hold |
+| 4 | — a **search**, not an item | The search response shape, id extraction, and whether a hit carries enough for listing mode to sell |
+| 5 | is on **Tmall**, or is **预售** — whichever you care about more | Whether Tmall differs from Taobao here and whether shop scores appear; or whether `presale_text` exists |
 
-Write the ids down before you start.
+Finding one listing that satisfies #1 entirely is the single highest-value
+minute of this exercise. Write the ids down before you start.
 
 ## Phase 2 — capture (7 calls)
 
@@ -57,17 +66,16 @@ read -rs SOURCE_API_SECRET && export SOURCE_API_SECRET
 export SOURCE_BASE_URL=https://api-gw.onebound.cn
 ```
 
-Then, five Taobao/Tmall items plus one search — **six calls**:
+Then the Taobao items, the bogus id and the search — **four calls**:
 
 ```
-python capture.py --platform taobao --search 蓝牙耳机 \
-    <id1> <id2> <id3> <id6> 1
+python capture.py --platform taobao --search 蓝牙耳机 <id1> <id5> 1
 ```
 
 And the 1688 offer — **one call**:
 
 ```
-python capture.py --platform 1688 <id4>
+python capture.py --platform 1688 <id2>
 ```
 
 What keeps this from leaking calls:
@@ -95,7 +103,7 @@ came back `MISSING`, what is in the payload that the map does not read yet
 
 Read it looking for:
 
-- [ ] **`shipping` MISSING on call 2.** If `post_fee` is not in the item
+- [ ] **`shipping` MISSING on call 1.** If `post_fee` is not in the item
       record, shipping cannot be returned without the B-class call, and the
       honest move is to drop the field and say so in the README — not to pay
       0.05 元 per product for it.
@@ -108,12 +116,12 @@ Read it looking for:
       the unread keys for `seller_info` / `shopinfo` subfields that do.
 - [ ] **`price_range` MISSING.** Expected. Confirm the SKU-derived span in the
       "what the buyer would receive" block looks right.
-- [ ] **`tiers` on call 4.** If `price_ranges` is missing, the whole `quote`
+- [ ] **`tiers` on the 1688 call.** If `price_ranges` is missing, the whole `quote`
       feature has nothing to walk. Look hard at the unread keys for the ladder
       under another name.
 - [ ] **Unread keys worth adding.** `promo_type`, `favcount`, review counts,
       delivery-time fields — anything a sourcing buyer would act on.
-- [ ] **Call 5's error shape.** Confirm `error_code` is not `"0000"` and that
+- [ ] **The bogus id's error shape.** Confirm `error_code` is not `"0000"` and that
       the record came out `upstream_error`, not `ok`.
 
 ## Phase 4 — fix and lock in (0 calls)
