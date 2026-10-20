@@ -71,6 +71,13 @@ margin and pays for itself after about 2,900 products a month.
   `apify-actor-start` $0.01 (one per GB of memory, minimum one). Apify's
   default `apify-default-dataset-item` event was removed, so records for ids
   that could not be served stay free. The README pricing table matches.
+- **2026-10-20 — Store prefill run on the platform.** Keyword `T恤 批发`,
+  quantity 100, 3 listings: all `ok`, charged 1 start + 3 `product-normalised`,
+  usage $0.0003. Two of the three were variant-priced with no ladder and came
+  back with a null quote; fixed in build 0.1.4 (quoted as a range), re-run
+  confirmed. Open: listing `524415310486` reports its shop as `阒蒇炎坝邢匏`,
+  not a company name. Raw response not captured yet, so whether OTAPI masks
+  it or the field map picks the wrong one is unknown.
 - **Left before publishing:** throughput measured against real latency, and
   the checks below.
 
