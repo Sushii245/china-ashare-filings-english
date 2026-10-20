@@ -1,4 +1,4 @@
-# 1688 Wholesale Products — Tiered Prices & Order Quotes
+# 1688 Scraper — Wholesale Prices, MOQ & Order Quotes
 
 **Price the order you intend to place, not the headline on the listing.**
 
@@ -149,9 +149,9 @@ run.
 
 | Event | Price | When it fires |
 |---|---|---|
-| `product-normalised` | $0.012 ($12 / 1,000) | A listing returned at full detail. |
+| `product-normalised` | $0.005 ($5 / 1,000) | A listing returned at full detail. |
 | `product-listed` | $0.002 ($2 / 1,000) | A record built from a search result, at listing level. |
-| `apify-actor-start` | $0.01 | Once per run, per GB of memory (at least once) — one charge at the default 512 MB. |
+| `apify-actor-start` | $0.005 | Once per run, per GB of memory (at least once) — one charge at the default 512 MB. |
 
 Platform usage is included; there is no separate compute charge.
 

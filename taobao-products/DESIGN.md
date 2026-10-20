@@ -153,17 +153,25 @@ the per-call price shown on the listing is the *overage* rate, not the base:
 | Ultra | $150 | 5,500/day | $0.000909 |
 | Mega | $350 | 15,000/day | $0.000778 |
 
-Full detail at $0.012 a product, on Pro:
+Full detail at $0.005 a product, on Pro. The price was $0.012 at first; the
+1688 Actors on the Store sell full detail at $0.004-0.005, the leader
+included, so it came down to the market before publishing.
 
-    sell price                 $0.0120
-    less Apify's 20%          -$0.0024
+    sell price                 $0.0050
+    less Apify's 20%          -$0.0010
     less platform compute     -$0.00007
-    less data-source call     -$0.00093
+    less data-source call     -$0.00093   (Pro's allowance, fully used)
+    less bandwidth            -$0.0005    (up to; ~0.5 MB a detail past 10 GB)
     ------------------------------------
-    margin                     $0.00860   (72%)
+    margin                     $0.0025    (about 50%)
 
-Pro pays for itself after ~2,900 products a month, and can be stopped any
-month. Validation and the first buyers fit inside Basic at no cost.
+Pro pays for itself after 6,500-7,500 products a month, and can be stopped any
+month. **Past Pro's 900 calls a day each detail call is overage at $0.005,
+more than the $0.004 left after Apify's cut**, so every full-detail product
+beyond the allowance loses about $0.001. At that volume move to Ultra
+($0.003 overage, 5,500 a day included) or raise the price. Basic is for
+validation only: its $0.008 overage loses money on every call past 20 a
+day.
 
 Listing level at $0.002 a record: a search call returns up to 50 hits, so the
 data-source cost per record is about $0.00002 and the margin about 76%. It is

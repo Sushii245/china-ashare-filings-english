@@ -1,7 +1,7 @@
 {
   "actorSpecification": 1,
   "name": "1688-wholesale-products",
-  "title": "1688 Wholesale Products — Tiered Prices & Order Quotes",
+  "title": "1688 Scraper — Wholesale Prices, MOQ & Order Quotes",
   "description": "1688.com listings as typed records: the wholesale price ladder, the minimum order, a quote for the quantity you actually intend to buy, sales figures labelled with what they measure, and Chinese and English titles kept apart.",
   "version": "0.1",
   "buildTag": "latest",

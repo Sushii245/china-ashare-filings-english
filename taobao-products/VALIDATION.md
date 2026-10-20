@@ -24,8 +24,9 @@ OneBound, once there is revenue to justify the prepayment.
 | Ultra | $150 | 5,500/day | $0.000909 | $0.003 | same |
 | Mega | $350 | 15,000/day | $0.000778 | $0.001 | same |
 
-Validation fits inside Basic. At $0.012 a product the Pro tier leaves a 72%
-margin and pays for itself after about 2,900 products a month.
+Validation fits inside Basic. At $0.005 a product the Pro tier leaves about a
+50% margin inside its daily allowance and pays for itself after 6,500-7,500
+products a month; past the allowance its $0.005 overage loses money (DESIGN.md).
 
 ## Progress
 
@@ -78,6 +79,11 @@ margin and pays for itself after about 2,900 products a month.
   confirmed. Open: listing `524415310486` reports its shop as `阒蒇炎坝邢匏`,
   not a company name. Raw response not captured yet, so whether OTAPI masks
   it or the field map picks the wrong one is unknown.
+- **2026-10-20 — repriced before publishing.** The Store's 1688 Actors sell
+  full detail at $0.004-0.005, so `product-normalised` $0.012 → $0.005 and
+  `apify-actor-start` $0.01 → $0.005; `product-listed` stays $0.002. Title
+  renamed to lead with "1688 Scraper", the term the category is searched by.
+  RapidAPI moves to Pro, since Basic's overage loses money at this price.
 - **Left before publishing:** throughput measured against real latency, and
   the checks below.
 
