@@ -4,9 +4,9 @@
 
 On 1688 the price a listing leads with is the **cheapest** rung of its
 wholesale ladder — the price at the largest order. A real T-shirt listing
-heads at ¥3.14; its ladder starts at 2 pieces for ¥4.30. Every other scraper
-hands you the headline, or the ladder as text, and leaves the arithmetic to
-you. This Actor does it: tell it how many pieces you want and each record
+heads at ¥3.14; its ladder starts at 2 pieces for ¥4.30. A scraper that hands
+you the headline, or the ladder as text, leaves the arithmetic to you. This
+Actor does it: tell it how many pieces you want and each record
 comes back with the unit price at that quantity, the subtotal, and whether you
 clear the seller's minimum.
 
