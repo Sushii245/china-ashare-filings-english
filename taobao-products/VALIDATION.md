@@ -84,6 +84,10 @@ products a month; past the allowance its $0.005 overage loses money (DESIGN.md).
   `apify-actor-start` $0.01 → $0.005; `product-listed` stays $0.002. Title
   renamed to lead with "1688 Scraper", the term the category is searched by.
   RapidAPI moves to Pro, since Basic's overage loses money at this price.
+- **2026-10-20 — published on the Store.** Build 0.1.6, public at
+  `apify.com/clifford_x/1688-wholesale-products`. Apify's daily auto-test runs
+  the prefill (`T恤 批发`, 3 listings): about four data-source calls a day, and
+  three empty or failed days in a row mark the Actor under maintenance.
 - **Left before publishing:** throughput measured against real latency, and
   the checks below.
 
