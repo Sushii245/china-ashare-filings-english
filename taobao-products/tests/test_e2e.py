@@ -31,7 +31,7 @@ PRICING = {
     "pricingModel": "PAY_PER_EVENT",
     "pricingPerEvent": {
         "actorChargeEvents": {
-            "product-normalised": {"eventTitle": "Listing", "eventPriceUsd": 0.012},
+            "product-normalised": {"eventTitle": "Listing", "eventPriceUsd": 0.005},
             "product-listed": {"eventTitle": "Search record", "eventPriceUsd": 0.002},
             # Locally the SDK prices any event it has no price for at $1 —
             # on the platform the same event costs $0. Pricing the synthetic
@@ -118,11 +118,11 @@ def test_a_run_without_pay_per_event_returns_everything(tmp_path):
 
 
 def test_the_charge_limit_stops_before_fetching_what_it_cannot_bill(tmp_path):
-    # $0.03 covers two listings at $0.012. All three fit in one batch of five,
+    # $0.0125 covers two listings at $0.005. All three fit in one batch of five,
     # so a run that checks the limit only when pushing has already paid the
     # data source for the third by the time it finds out.
     run = run_actor(
-        tmp_path, {"itemIds": OK_IDS, "platform": "1688", "concurrency": 5}, **ppe(0.03)
+        tmp_path, {"itemIds": OK_IDS, "platform": "1688", "concurrency": 5}, **ppe(0.0125)
     )
     assert run.proc.returncode == 0, run.log
     assert [r["itemId"] for r in run.records] == OK_IDS[:2]
@@ -135,7 +135,7 @@ def test_unbilled_records_do_not_use_up_the_budget(tmp_path):
     # the next batch, and no id is dropped by the batch being trimmed.
     ids = [REFUSED_ID, *OK_IDS]
     run = run_actor(
-        tmp_path, {"itemIds": ids, "platform": "1688", "concurrency": 5}, **ppe(0.03)
+        tmp_path, {"itemIds": ids, "platform": "1688", "concurrency": 5}, **ppe(0.0125)
     )
     assert run.proc.returncode == 0, run.log
     assert [(r["itemId"], r["status"]) for r in run.records] == [
@@ -147,7 +147,7 @@ def test_unbilled_records_do_not_use_up_the_budget(tmp_path):
 
 
 def test_no_budget_at_all_fetches_nothing(tmp_path):
-    run = run_actor(tmp_path, {"itemIds": OK_IDS, "platform": "1688"}, **ppe(0.005))
+    run = run_actor(tmp_path, {"itemIds": OK_IDS, "platform": "1688"}, **ppe(0.004))
     assert run.proc.returncode == 0, run.log
     assert run.records == []
     assert run.fetched == []

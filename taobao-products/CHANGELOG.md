@@ -5,6 +5,10 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
+- Priced to the market before publishing: full detail $0.005 (was $0.012),
+  run start $0.005 (was $0.01), listing level unchanged at $0.002. Renamed
+  "1688 Scraper — Wholesale Prices, MOQ & Order Quotes", the term the category
+  is searched by.
 - A listing whose variants are priced apart, with no ladder, is quoted as a
   range — cheapest variant to dearest, on both the unit price and the
   subtotal. It used to be quoted as null, which on the first live run left two

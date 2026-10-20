@@ -1,5 +1,5 @@
 {
-  "title": "1688 Wholesale Products",
+  "title": "1688 Scraper",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -55,7 +55,7 @@
     "quantity": {
       "title": "Order quantity to price",
       "type": "integer",
-      "description": "How many pieces you intend to order. Each record then carries a quote: the unit price at that quantity resolved against the wholesale ladder, the subtotal, which tier it landed on, and whether the quantity clears the seller's minimum. Leave empty to skip.",
+      "description": "How many pieces you intend to order. Each record then carries a quote: the unit price at that quantity resolved against the wholesale ladder (a range, cheapest to dearest, when the variants are priced apart and there is no ladder), the subtotal, which tier it landed on, and whether the quantity clears the seller's minimum. Leave empty to skip.",
       "editor": "number",
       "minimum": 1,
       "maximum": 1000000,
