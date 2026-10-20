@@ -1,0 +1,691 @@
+[
+  {
+    "itemId": "669724481680",
+    "platform": "1688",
+    "url": "https://detail.1688.com/offer/669724481680.html",
+    "status": "ok",
+    "statusDetail": null,
+    "titleCn": "新款纯色男装短袖t恤青年修身t恤外贸5元批发 地摊货源男短袖五元",
+    "titleEn": "(Cross-border trading), (Wholesale), solid short sleeve T-shirt, slim fit, with short sleeve",
+    "price": {
+      "value": 3.14,
+      "valueMax": null,
+      "currency": "CNY",
+      "sourceTextCn": null
+    },
+    "originalPrice": {
+      "value": 3.3,
+      "valueMax": null,
+      "currency": "CNY",
+      "sourceTextCn": null
+    },
+    "priceTiers": [
+      {
+        "minQty": 2,
+        "maxQty": 99,
+        "unitPrice": {
+          "value": 4.3,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "sourceTextCn": null
+      },
+      {
+        "minQty": 100,
+        "maxQty": 9999,
+        "unitPrice": {
+          "value": 4.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "sourceTextCn": null
+      },
+      {
+        "minQty": 10000,
+        "maxQty": null,
+        "unitPrice": {
+          "value": 3.3,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "sourceTextCn": null
+      }
+    ],
+    "minOrderQuantity": {
+      "value": 2,
+      "unitCn": null,
+      "sourceTextCn": null
+    },
+    "sales": {
+      "count": 10,
+      "isApproximate": false,
+      "window": "last_30_days",
+      "unit": null,
+      "sourceTextCn": null
+    },
+    "stock": {
+      "value": 9960835,
+      "isApproximate": true,
+      "sourceTextCn": null
+    },
+    "shipping": null,
+    "quote": {
+      "quantity": 50,
+      "unitPrice": {
+        "value": 4.3,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": null
+      },
+      "subtotal": {
+        "value": 215.0,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": null
+      },
+      "tierSourceTextCn": null,
+      "meetsMinimumOrder": true
+    },
+    "discountPct": 4.8,
+    "skuCount": 1,
+    "isPresale": null,
+    "presaleShipsWithinDays": null,
+    "shopNameCn": "深圳市龙华区映梓美服装厂",
+    "shopId": "b2b-2595143965a5547",
+    "shopScores": [
+      {
+        "aspect": "description_match",
+        "aspectCn": null,
+        "score": 5.0,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      },
+      {
+        "aspect": "service",
+        "aspectCn": null,
+        "score": 1.6,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      },
+      {
+        "aspect": "logistics",
+        "aspectCn": null,
+        "score": 2.8,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      }
+    ],
+    "skus": [
+      {
+        "skuId": "ac7055bae35e9214b62a9f225e0185ae",
+        "optionsCn": {
+          "颜色": "多款多色",
+          "尺码": "三码搭配"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 3.3,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 9960835
+      }
+    ],
+    "images": [
+      "https://cbu01.alicdn.com/img/ibank/O1CN01QZcrXy1fA18zIRjGX_!!2595143965-0-cib.jpg",
+      "https://cbu01.alicdn.com/img/ibank/O1CN01xaiuOf1fA18uAI9Cm_!!2595143965-0-cib.jpg"
+    ],
+    "attributesCn": {
+      "风格": "基础大众",
+      "货号": "纯色男装",
+      "主面料成分": "棉",
+      "图案": "纯色",
+      "版型": "宽松型",
+      "货源类别": "现货",
+      "适合人群": "青年",
+      "淘货类别": "青春流行（18-24岁）",
+      "款式": "套头",
+      "领型": "圆领",
+      "袖长": "短袖",
+      "是否连帽": "不连帽",
+      "厚薄": "薄款",
+      "品牌": "男装",
+      "适合季节": "夏季",
+      "误差范围": "0.1",
+      "是否库存": "否",
+      "上市年份/季节": "2025夏季",
+      "面料名称": "棉",
+      "主面料成分的含量": "90",
+      "适用场景": "日常",
+      "款式细节": "印花",
+      "印花主题": "中国文化",
+      "工艺": "印花/印染",
+      "是否跨境出口专供货源": "否",
+      "类别": "短袖T恤",
+      "袖型": "常规",
+      "原创设计货源": "否",
+      "有无质检报告": "否",
+      "质检报告编号": "男装",
+      "克重": "180g",
+      "材质功能": "透气",
+      "适用年龄段": "成人",
+      "适用性别": "男",
+      "产品类别": "T恤"
+    },
+    "fetchedAt": null
+  },
+  {
+    "itemId": "623219903269",
+    "platform": "1688",
+    "url": "https://detail.1688.com/offer/623219903269.html",
+    "status": "ok",
+    "statusDetail": null,
+    "titleCn": "重磅男士t恤短袖纯棉270g新疆棉复古阿美咔叽宽松潮牌夏天T恤批发",
+    "titleEn": "(Wholesale), cotton retro short sleeve T-shirt, with short sleeve, oversize",
+    "price": {
+      "value": 24.9,
+      "valueMax": null,
+      "currency": "CNY",
+      "sourceTextCn": null
+    },
+    "originalPrice": {
+      "value": 24.9,
+      "valueMax": null,
+      "currency": "CNY",
+      "sourceTextCn": null
+    },
+    "priceTiers": [
+      {
+        "minQty": 1,
+        "maxQty": 99,
+        "unitPrice": {
+          "value": 26.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "sourceTextCn": null
+      },
+      {
+        "minQty": 100,
+        "maxQty": 4999,
+        "unitPrice": {
+          "value": 25.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "sourceTextCn": null
+      },
+      {
+        "minQty": 5000,
+        "maxQty": null,
+        "unitPrice": {
+          "value": 24.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "sourceTextCn": null
+      }
+    ],
+    "minOrderQuantity": {
+      "value": 1,
+      "unitCn": null,
+      "sourceTextCn": null
+    },
+    "sales": {
+      "count": 412,
+      "isApproximate": false,
+      "window": "last_30_days",
+      "unit": null,
+      "sourceTextCn": null
+    },
+    "stock": {
+      "value": 3641,
+      "isApproximate": true,
+      "sourceTextCn": null
+    },
+    "shipping": null,
+    "quote": {
+      "quantity": 50,
+      "unitPrice": {
+        "value": 26.9,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": null
+      },
+      "subtotal": {
+        "value": 1345.0,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": null
+      },
+      "tierSourceTextCn": null,
+      "meetsMinimumOrder": true
+    },
+    "discountPct": null,
+    "skuCount": 6,
+    "isPresale": null,
+    "presaleShipsWithinDays": null,
+    "shopNameCn": "青岛圣英针纺服饰有限公司",
+    "shopId": "b2b-2208347666169fb055",
+    "shopScores": [
+      {
+        "aspect": "description_match",
+        "aspectCn": null,
+        "score": 3.0,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      },
+      {
+        "aspect": "service",
+        "aspectCn": null,
+        "score": 4.0,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      },
+      {
+        "aspect": "logistics",
+        "aspectCn": null,
+        "score": 3.4,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      }
+    ],
+    "skus": [
+      {
+        "skuId": "94d1d179497744028aa76873afdeba62",
+        "optionsCn": {
+          "颜色": "白色",
+          "尺码": "S"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 24.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 26
+      },
+      {
+        "skuId": "cef93beef156f1799e736c649f36efae",
+        "optionsCn": {
+          "颜色": "白色",
+          "尺码": "M"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 24.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 25
+      },
+      {
+        "skuId": "82114cbd2c10b5e97b01af1510807e2d",
+        "optionsCn": {
+          "颜色": "白色",
+          "尺码": "L"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 24.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 33
+      },
+      {
+        "skuId": "c45d8408137e34adf8e695250c42a2e9",
+        "optionsCn": {
+          "颜色": "白色",
+          "尺码": "XL"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 24.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 43
+      },
+      {
+        "skuId": "df78564262818d6eb0c428a37ab4a251",
+        "optionsCn": {
+          "颜色": "白色",
+          "尺码": "XXL"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 24.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 42
+      },
+      {
+        "skuId": "e36b5ea0b0624852e776139a5e97d448",
+        "optionsCn": {
+          "颜色": "白色",
+          "尺码": "XXXL"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 24.9,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 1
+      }
+    ],
+    "images": [
+      "https://cbu01.alicdn.com/img/ibank/O1CN01Z865Bm1vRSHkTghbD_!!2208347666169-0-cib.jpg",
+      "https://cbu01.alicdn.com/img/ibank/O1CN01VS04z21vRSHgcKcQy_!!2208347666169-0-cib.jpg"
+    ],
+    "attributesCn": {
+      "风格": "日系复古",
+      "货号": "T-270",
+      "主面料成分": "棉",
+      "图案": "纯色",
+      "版型": "直筒型",
+      "货源类别": "现货",
+      "适合人群": "青年",
+      "淘货类别": "时尚都市（24-35岁）",
+      "款式": "套头",
+      "领型": "无领",
+      "领口形状": "圆领",
+      "袖长": "短袖",
+      "是否连帽": "不连帽",
+      "厚薄": "加厚",
+      "品牌": "其他",
+      "适合季节": "四季",
+      "误差范围": "1-3cm",
+      "是否库存": "否",
+      "上市年份/季节": "2025夏季",
+      "面料名称": "精梳棉",
+      "主面料成分的含量": "96%及以上",
+      "适用场景": "休闲",
+      "款式细节": "重磅",
+      "印花主题": "纯色",
+      "工艺": "高温定型",
+      "是否跨境出口专供货源": "否",
+      "类别": "T恤背心",
+      "袖型": "常规",
+      "原创设计货源": "是",
+      "有无质检报告": "否",
+      "质检报告编号": "220301598",
+      "克重": "270G",
+      "材质功能": "透气、吸湿排汗、色牢度高",
+      "适用年龄段": "成人",
+      "功能": "吸湿排汗",
+      "适用性别": "男",
+      "领标": "有领标",
+      "产品类别": "T恤",
+      "货源类型": "源头工厂",
+      "吊牌": "无吊牌"
+    },
+    "fetchedAt": null
+  },
+  {
+    "itemId": "672715568844",
+    "platform": "1688",
+    "url": "https://detail.1688.com/offer/672715568844.html",
+    "status": "ok",
+    "statusDetail": null,
+    "titleCn": "跨境男装夏季男士纯棉t恤美式青年大码水洗纯色短袖男t恤光板批发",
+    "titleEn": "(Cross-border trading), (Wholesale), solid summer cotton short sleeve T-shirt, American style, plus size",
+    "price": {
+      "value": 33.25,
+      "valueMax": null,
+      "currency": "CNY",
+      "sourceTextCn": null
+    },
+    "originalPrice": {
+      "value": 35.0,
+      "valueMax": null,
+      "currency": "CNY",
+      "sourceTextCn": null
+    },
+    "priceTiers": [
+      {
+        "minQty": 1,
+        "maxQty": 998,
+        "unitPrice": {
+          "value": 40.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "sourceTextCn": null
+      },
+      {
+        "minQty": 999,
+        "maxQty": null,
+        "unitPrice": {
+          "value": 35.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "sourceTextCn": null
+      }
+    ],
+    "minOrderQuantity": {
+      "value": 1,
+      "unitCn": null,
+      "sourceTextCn": null
+    },
+    "sales": {
+      "count": 142,
+      "isApproximate": false,
+      "window": "last_30_days",
+      "unit": null,
+      "sourceTextCn": null
+    },
+    "stock": {
+      "value": 47887,
+      "isApproximate": true,
+      "sourceTextCn": null
+    },
+    "shipping": null,
+    "quote": {
+      "quantity": 50,
+      "unitPrice": {
+        "value": 40.0,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": null
+      },
+      "subtotal": {
+        "value": 2000.0,
+        "valueMax": null,
+        "currency": "CNY",
+        "sourceTextCn": null
+      },
+      "tierSourceTextCn": null,
+      "meetsMinimumOrder": true
+    },
+    "discountPct": 5.0,
+    "skuCount": 6,
+    "isPresale": null,
+    "presaleShipsWithinDays": null,
+    "shopNameCn": "宁波云感服装有限公司",
+    "shopId": "b2b-28136947282e3e3",
+    "shopScores": [
+      {
+        "aspect": "description_match",
+        "aspectCn": null,
+        "score": 4.6,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      },
+      {
+        "aspect": "service",
+        "aspectCn": null,
+        "score": 5.0,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      },
+      {
+        "aspect": "logistics",
+        "aspectCn": null,
+        "score": 4.1,
+        "vsPeersPct": null,
+        "sourceTextCn": null
+      }
+    ],
+    "skus": [
+      {
+        "skuId": "2e578fba8900edcb236eff5cdc5eefb5",
+        "optionsCn": {
+          "颜色": "灰色",
+          "尺码": "M"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 35.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 1895
+      },
+      {
+        "skuId": "43b0e72e98731aed69e1f0cc7d64bf4d",
+        "optionsCn": {
+          "颜色": "灰色",
+          "尺码": "L"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 35.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 1883
+      },
+      {
+        "skuId": "893746f5330dc3273d24aa1ac1a9a8b5",
+        "optionsCn": {
+          "颜色": "灰色",
+          "尺码": "XL"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 35.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 1902
+      },
+      {
+        "skuId": "42d994cba0210528142a743d4069700f",
+        "optionsCn": {
+          "颜色": "灰色",
+          "尺码": "XXL"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 35.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 1938
+      },
+      {
+        "skuId": "23424d07d2e30e4f94821ebb808306a1",
+        "optionsCn": {
+          "颜色": "灰色",
+          "尺码": "XXXL"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 35.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 1948
+      },
+      {
+        "skuId": "01d9d07aae887f1125c37dc508490153",
+        "optionsCn": {
+          "颜色": "卡其色",
+          "尺码": "M"
+        },
+        "optionsEn": null,
+        "price": {
+          "value": 35.0,
+          "valueMax": null,
+          "currency": "CNY",
+          "sourceTextCn": null
+        },
+        "stock": 1853
+      }
+    ],
+    "images": [
+      "https://cbu01.alicdn.com/img/ibank/O1CN01ZE5qNE1knTgz7grRJ_!!2813694728-0-cib.jpg",
+      "https://cbu01.alicdn.com/img/ibank/O1CN01ICavz31knTh0EfDa7_!!2813694728-0-cib.jpg"
+    ],
+    "attributesCn": {
+      "风格": "美式复古",
+      "货号": "D-66",
+      "主面料成分": "棉",
+      "图案": "纯色",
+      "版型": "宽松型",
+      "货源类别": "现货",
+      "适合人群": "青年",
+      "淘货类别": "青春流行（18-24岁）",
+      "款式": "套头",
+      "领型": "无领",
+      "领口形状": "圆领",
+      "袖长": "短袖",
+      "是否连帽": "不连帽",
+      "厚薄": "普通",
+      "品牌": "LIVE GREAT",
+      "适合季节": "夏季",
+      "误差范围": "1-3",
+      "是否库存": "是",
+      "库存类型": "整单",
+      "上市年份/季节": "2024年夏季",
+      "面料名称": "棉类混纺",
+      "主面料成分的含量": "91%(含)-95%(含)",
+      "适用场景": "休闲",
+      "款式细节": "洗水",
+      "印花主题": "无",
+      "工艺": "免烫处理",
+      "主要下游平台": "ebay、亚马逊、wish、速卖通、独立站、LAZADA、其他",
+      "主要销售地区": "欧洲、南美、东南亚、北美、东北亚、中东、其他",
+      "有可授权的自有品牌": "是",
+      "是否跨境出口专供货源": "是",
+      "类别": "T恤背心",
+      "袖型": "常规",
+      "原创设计货源": "否",
+      "有无质检报告": "否",
+      "克重": "180g(含)-250g(不含)",
+      "材质功能": "透气、吸湿排汗、其他",
+      "适用年龄段": "成人",
+      "适用性别": "男",
+      "材质成分": "棉:95%、聚酯纤维（涤纶）:5%",
+      "领标": "有领标",
+      "产品类别": "T恤",
+      "货源类型": "源头工厂",
+      "吊牌": "有吊牌"
+    },
+    "fetchedAt": null
+  }
+]

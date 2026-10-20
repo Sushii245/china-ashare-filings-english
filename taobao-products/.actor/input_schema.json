@@ -1,0 +1,109 @@
+{
+  "title": "1688 Scraper",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "itemIds": {
+      "title": "Item IDs",
+      "type": "array",
+      "description": "1688 offer ids, found in the listing URL: detail.1688.com/offer/612345678901.html. A pasted URL works too — the id is read out of it rather than sent as-is.",
+      "editor": "stringList",
+      "uniqueItems": true
+    },
+    "itemUrls": {
+      "title": "Item URLs",
+      "type": "array",
+      "description": "1688 listing URLs instead of ids; the offer id is read out of each.",
+      "editor": "requestListSources",
+      "default": []
+    },
+    "keyword": {
+      "title": "Search keyword",
+      "type": "string",
+      "description": "Search 1688 instead of naming ids, in Chinese or English, e.g. T恤 批发 or linear guide slider. Required for listing level.",
+      "editor": "textfield",
+      "prefill": "T恤 批发"
+    },
+    "detailLevel": {
+      "title": "Detail level",
+      "type": "string",
+      "description": "Full detail fetches each listing: the wholesale ladder and minimum order, variants, attributes and seller scores. Listing level sells the search results themselves — title, price, sales, supplier, image, and the ladder where the search result includes it (about half the time) — which is enough to shortlist on and costs a fraction, because one call returns a whole page. Listing level needs a search keyword.",
+      "editor": "select",
+      "default": "full",
+      "enum": [
+        "full",
+        "listing"
+      ],
+      "enumTitles": [
+        "Full detail (one call per listing)",
+        "Listing level (cheap, from search results)"
+      ]
+    },
+    "platform": {
+      "title": "Platform",
+      "type": "string",
+      "description": "The catalogue to read. 1688 today; Taobao and Tmall are planned and will appear here when the data source serves them.",
+      "editor": "select",
+      "default": "1688",
+      "enum": [
+        "1688"
+      ],
+      "enumTitles": [
+        "1688 (wholesale)"
+      ]
+    },
+    "quantity": {
+      "title": "Order quantity to price",
+      "type": "integer",
+      "description": "How many pieces you intend to order. Each record then carries a quote: the unit price at that quantity resolved against the wholesale ladder (a range, cheapest to dearest, when the variants are priced apart and there is no ladder), the subtotal, which tier it landed on, and whether the quantity clears the seller's minimum. Leave empty to skip.",
+      "editor": "number",
+      "minimum": 1,
+      "maximum": 1000000,
+      "prefill": 100
+    },
+    "maxProducts": {
+      "title": "Max products",
+      "type": "integer",
+      "description": "Hard cap on products returned in this run. Each product returned with data is one billable event.",
+      "editor": "number",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 1000,
+      "prefill": 3
+    },
+    "includeSkus": {
+      "title": "Include the SKU matrix",
+      "type": "boolean",
+      "description": "On: return every purchasable variant with its own options, price and stock. Off: keep records small and return the listing level only.",
+      "editor": "checkbox",
+      "default": true
+    },
+    "concurrency": {
+      "title": "Listings fetched at once",
+      "type": "integer",
+      "description": "How many listings to fetch in parallel. Higher is faster; lower it if your provider plan has a tight rate limit. Requests stay spaced by the interval below however many workers run.",
+      "editor": "number",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 10
+    },
+    "minRequestInterval": {
+      "title": "Minimum seconds between requests",
+      "type": "number",
+      "description": "Seconds between calls to the data source, enforced across all workers — decimals allowed, e.g. 0.2. 0 removes the spacing, leaving parallelism as the only limit. Raise it if your provider plan has a tight rate limit.",
+      "editor": "number",
+      "default": 0.2,
+      "minimum": 0,
+      "maximum": 30,
+      "sectionCaption": "Advanced"
+    },
+    "sourceApiKey": {
+      "title": "Your own RapidAPI key (optional)",
+      "type": "string",
+      "description": "Leave empty to use the included data source. Supply a key only if your organisation holds its own OTAPI 1688 subscription on RapidAPI and needs calls made under it.",
+      "editor": "textfield",
+      "isSecret": true,
+      "sectionCaption": "Advanced"
+    }
+  }
+}
