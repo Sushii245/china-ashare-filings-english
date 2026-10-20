@@ -43,9 +43,10 @@ Priced off the headline, those 50 pieces would have come to ¥157 — 27% short.
   next one begins.
 - **Overlapping rungs** quote the dearer one. Nothing says which the seller
   means, and understating an order is the harmful way to be wrong.
-- **No ladder at all**: the listing price. A listing priced as a span across
-  variants has no single unit price to resolve to, so `unitPrice` is `null`
-  rather than quietly the low end.
+- **No ladder at all**: the listing price. A listing whose variants are
+  priced apart is quoted as a range — `unitPrice` and `subtotal` each carry
+  `value` (the cheapest variant) and `valueMax` (the dearest) — rather than
+  quietly the low end.
 - **A promotion** shows as `price` with the regular price in `originalPrice`
   and the difference in `discountPct`. The quote walks the published ladder,
   which is priced at the regular rate.

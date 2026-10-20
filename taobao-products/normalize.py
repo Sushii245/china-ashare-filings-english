@@ -522,7 +522,17 @@ def normalize(
         if price is not None and not on_promotion:
             candidates.append(price.value)
         if price is not None and len(set(candidates)) > 1:
+            listed = price.value
             price = Money(value=min(candidates), value_max=max(candidates))
+            # Off promotion the regular price is the listing price, so it spans
+            # the same variants. Left as the single figure it read as one price
+            # beside a range (20.8 against 20.8-23 on a real listing).
+            if (
+                not on_promotion
+                and original_price is not None
+                and original_price.value == listed
+            ):
+                original_price = Money(value=price.value, value_max=price.value_max)
 
     stock_raw = _scalar(field("stock"))
     stock_text = stock_raw if isinstance(stock_raw, str) else None
@@ -665,13 +675,22 @@ def _build_quote(product: Product, quantity: int) -> Quote:
         quote.unit_price = rung.unit_price
         quote.tier_source_text_cn = rung.source_text_cn
     elif product.price is not None and not product.price.is_range:
-        # No ladder at all: the flat price. A span across variants has no
-        # single unit price to quote.
+        # No ladder at all: the flat price.
         quote.unit_price = product.price
+    elif product.price is not None:
+        # A span across variants: the cost depends on which variants are
+        # ordered, so the quote is the span itself — the cheapest variant to
+        # the dearest. Quoting the low end alone understated the order; a null
+        # left half the listings on a real search with no quote at all.
+        quote.unit_price = Money(value=product.price.value, value_max=product.price.value_max)
 
     if quote.unit_price is not None:
         # Derived, so it carries no source text: the listing never printed it.
-        quote.subtotal = Money(value=round(quote.unit_price.value * quantity, 2))
+        high = quote.unit_price.value_max
+        quote.subtotal = Money(
+            value=round(quote.unit_price.value * quantity, 2),
+            value_max=round(high * quantity, 2) if high is not None else None,
+        )
 
     return quote
 

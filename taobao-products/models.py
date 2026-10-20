@@ -116,8 +116,9 @@ class Quote:
     category answers it, so the Actor does the walk and shows which step it
     landed on.
 
-    ``unit_price`` is ``None`` when the listing gives a span across variants
-    and no ladder, because there is no single answer to resolve to.
+    When the listing gives a span across variants and no ladder, ``unit_price``
+    and ``subtotal`` are that span: the cost depends on which variants are
+    ordered, so both ends are shown rather than the low one alone.
     """
 
     quantity: int

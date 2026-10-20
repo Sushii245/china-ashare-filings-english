@@ -294,3 +294,44 @@ def test_a_zero_promotion_falls_back_to_nothing_rather_than_free():
     # each alternative of the price path is read on its own.
     assert record["price"]["value"] == 3.3
     assert record["discountPct"] is None
+
+
+# ------------------------------------- variants priced apart, with no ladder
+
+
+def variant_priced(prices: list[float]) -> dict:
+    """623219903269 reshaped like 693981828483 on the live Store run: no
+    ladder, the listing at the cheapest variant, the variants priced apart."""
+    raw = copy.deepcopy(SOURCE.fetch_product("623219903269"))
+    item = raw.payload["Result"]["Item"]
+    item["QuantityRanges"] = []
+    item["Price"]["OriginalPrice"] = min(prices)
+    for sku, price in zip(item["ConfiguredItems"], prices * len(item["ConfiguredItems"])):
+        sku["Price"]["OriginalPrice"] = price
+    return normalize(raw, config=CONFIG, quantity=100).to_item()
+
+
+def test_variants_priced_apart_are_quoted_as_a_range():
+    # Two of three listings on the live run came back with a null quote.
+    record = variant_priced([20.8, 21.8, 23.0])
+    assert record["priceTiers"] == []
+    assert (record["price"]["value"], record["price"]["valueMax"]) == (20.8, 23.0)
+    quote = record["quote"]
+    assert (quote["unitPrice"]["value"], quote["unitPrice"]["valueMax"]) == (20.8, 23.0)
+    assert (quote["subtotal"]["value"], quote["subtotal"]["valueMax"]) == (2080.0, 2300.0)
+
+
+def test_off_promotion_the_regular_price_spans_the_same_variants():
+    # It was the single listing figure, 20.8 beside a 20.8-23 price.
+    record = variant_priced([20.8, 21.8, 23.0])
+    assert record["originalPrice"]["value"] == 20.8
+    assert record["originalPrice"]["valueMax"] == 23.0
+    assert record["discountPct"] is None
+
+
+def test_variants_all_at_one_price_stay_a_single_quote():
+    record = variant_priced([20.8])
+    assert record["price"]["valueMax"] is None
+    assert record["originalPrice"]["valueMax"] is None
+    assert record["quote"]["unitPrice"]["valueMax"] is None
+    assert record["quote"]["subtotal"]["value"] == 2080.0

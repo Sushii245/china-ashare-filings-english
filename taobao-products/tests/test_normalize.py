@@ -438,13 +438,21 @@ def test_a_flat_priced_listing_quotes_off_the_single_price(source):
     assert quote["meetsMinimumOrder"] is True
 
 
-def test_a_price_span_cannot_be_quoted_and_says_so(source):
-    # 600530677383 is 128-298 across SKUs. There is no single unit price to
-    # resolve to, and picking the low end would understate the order.
+def test_a_price_span_is_quoted_as_a_range(source):
+    # 600530677383 is 128-298 across SKUs. The cost depends on which variants
+    # are ordered: the low end alone would understate it, and a null left the
+    # buyer with nothing. The quote is the span, cheapest to dearest.
     quote = normalize(source.fetch_product("600530677383"), quantity=10).to_item()["quote"]
     assert quote["quantity"] == 10
-    assert quote["unitPrice"] is None
-    assert quote["subtotal"] is None
+    assert (quote["unitPrice"]["value"], quote["unitPrice"]["valueMax"]) == (128.0, 298.0)
+    assert (quote["subtotal"]["value"], quote["subtotal"]["valueMax"]) == (1280.0, 2980.0)
+    assert quote["unitPrice"]["sourceTextCn"] is None
+
+
+def test_a_flat_quote_has_no_upper_end(source):
+    quote = normalize(source.fetch_product("555000111222"), quantity=3).to_item()["quote"]
+    assert quote["unitPrice"]["valueMax"] is None
+    assert quote["subtotal"]["valueMax"] is None
 
 
 def test_no_quantity_means_no_quote(source):

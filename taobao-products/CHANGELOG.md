@@ -5,6 +5,13 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
+- A listing whose variants are priced apart, with no ladder, is quoted as a
+  range — cheapest variant to dearest, on both the unit price and the
+  subtotal. It used to be quoted as null, which on the first live run left two
+  of three listings with no quote at all.
+- Off promotion, `originalPrice` spans the same variants as `price`. It was
+  the single listing figure, which read as one price beside a range.
+
 - 1688 listings as typed records, through the OTAPI 1688 data source on
   RapidAPI. Input by offer id, by listing URL, or by search keyword. Taobao and
   Tmall are planned through a second data source; asking for them today is
@@ -86,7 +93,7 @@ a real response first (VALIDATION.md).
 - Optional `quantity` input produces a `quote` per listing: the unit price
   resolved against the 阶梯价 ladder, the subtotal, which tier it landed on,
   and whether the quantity clears the seller's minimum. A span-priced listing
-  reports a null unit price rather than silently using the low end.
+  is quoted as the span rather than silently at the low end.
 - A listing URL pasted into the ids field has its id read out of it, and an
   entry with no id in it is skipped with a warning. Both used to be sent to
   the provider verbatim, at one billed call each for a guaranteed miss.
