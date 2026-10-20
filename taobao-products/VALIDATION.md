@@ -59,6 +59,13 @@ margin and pays for itself after about 2,900 products a month.
   unprotected code.
 - **2026-10-20 — README and samples checked against real records.** The
   examples now use real values; `samples/` holds real normalised records.
+- **2026-10-20 — deployed.** `apify push` built `clifford_x/1688-wholesale-products`
+  (Actor `OqcMBgcUFQI0WCV7G`, build 0.1.1), with the RapidAPI key as the
+  secret `otapi-1688-rapidapi-key`. Smoke run on the platform (keyword
+  `T恤 批发`, 2 listings, quantity 100): succeeded, both listings `ok`, a batch
+  of 2 detail calls in 1.8 s, three real OTAPI calls in all. One listing came
+  back span-priced (variants at 20.8 / 21.8 / 23), so its quote is null as
+  designed — a quote range would serve such listings better; noted for later.
 - **Left before publishing:** price `apify-actor-start` in the Monetization
   settings (no code) — and add it to the README's pricing table when you do,
   since buyers are told they pay only for records returned; throughput
