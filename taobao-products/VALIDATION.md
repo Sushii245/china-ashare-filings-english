@@ -88,6 +88,14 @@ products a month; past the allowance its $0.005 overage loses money (DESIGN.md).
   `apify.com/clifford_x/1688-wholesale-products`. Apify's daily auto-test runs
   the prefill (`T恤 批发`, 3 listings): about four data-source calls a day, and
   three empty or failed days in a row mark the Actor under maintenance.
+- **2026-10-20 — alerts checked.** Apify: Issues, reviews, usage-anomaly
+  and monthly-summary notifications already on (email and web). Monitoring
+  alerts cover only runs in this account, not buyers' runs or the Store's
+  daily test, whose failures Apify emails about itself. RapidAPI: no consumer
+  alert setting exists; it alerts on its own at 85% and 100% of quota, and
+  overage cannot be capped from the consumer side. The Basic quota was 100%
+  used on 2026-10-20, so calls until it resets are overage at $0.008. Still
+  on Basic: the move to Pro is a payment, left to the account owner.
 - **Left before publishing:** throughput measured against real latency, and
   the checks below.
 
