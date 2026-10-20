@@ -314,3 +314,31 @@ def test_a_few_failures_do_not_trip_the_breaker(tmp_path):
     assert run.proc.returncode == 0, run.log
     assert sorted(run.fetched) == sorted(ids)
     assert "stopped early" not in run.log
+
+
+# -------------------------------------------------------- a rejected key
+
+def test_a_rejected_key_fails_the_run_at_once(tmp_path):
+    # Without this, each listing became "unavailable", the breaker tripped at
+    # ten, and the run reported success — pointing at the ids rather than at
+    # the key that had expired.
+    run = run_actor(
+        tmp_path,
+        {"itemIds": [*OK_IDS, *BOGUS[:12]], "platform": "1688", "maxProducts": 50, "concurrency": 5},
+        FETCH_SPY_REJECT_KEY="1",
+    )
+    assert run.proc.returncode != 0
+    assert len(run.fetched) <= 5, run.fetched           # one batch at most
+    assert run.records == []
+    assert "rejected" in run.log and "You are not subscribed to this API." in run.log
+
+
+def test_a_rejected_key_fails_a_listing_run_too(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"keyword": "x", "detailLevel": "listing", "platform": "1688"},
+        FETCH_SPY_REJECT_KEY="1",
+    )
+    assert run.proc.returncode != 0
+    assert run.searched_pages == [1]
+    assert "rejected" in run.log

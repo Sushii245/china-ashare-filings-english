@@ -556,3 +556,45 @@ def test_search_response_returns_the_raw_payload():
     # thing the first search against a new provider is for — its shape.
     client = _mapped('{"anything": {"at": "all"}}')
     assert client.search_response("x") == {"anything": {"at": "all"}}
+
+
+# ------------------------------------------------- client errors from the API
+
+@pytest.mark.parametrize(
+    "code,body",
+    [
+        (401, '{"message": "Invalid API key. Go to https://docs.rapidapi.com/docs/keys for more info."}'),
+        (403, '{"message": "You are not subscribed to this API."}'),
+    ],
+)
+def test_a_rejected_key_fails_at_once_with_the_providers_reason(code, body):
+    # An invalid key or a lapsed subscription will not fix itself on retry,
+    # and it is not a fact about one listing: it is raised, not turned into an
+    # item status, and the provider's own message survives.
+    client = build([FakeResponse(status_code=code, body=body)])
+    with pytest.raises(source_mod.AuthenticationFailed) as caught:
+        client.fetch_product("1")
+    assert len(client.session.calls) == 1
+    assert str(code) in str(caught.value)
+    assert json.loads(body)["message"] in str(caught.value)
+
+
+def test_a_rejected_key_on_search_is_raised_too():
+    client = build([FakeResponse(status_code=403, body='{"message": "You are not subscribed to this API."}')])
+    with pytest.raises(source_mod.AuthenticationFailed):
+        client.search_raw("x")
+
+
+def test_a_404_is_not_retried():
+    client = build([FakeResponse(status_code=404, body='{"message": "Endpoint does not exist"}')])
+    raw = client.fetch_product("1")
+    assert raw.status == "upstream_error"
+    assert len(client.session.calls) == 1
+    assert "Endpoint does not exist" in (raw.status_detail or "")
+
+
+def test_a_rate_limit_is_still_retried():
+    client = build([FakeResponse(status_code=429, body='{"message": "Too many requests"}'),
+                    FakeResponse(body=OK_BODY)])
+    assert client.fetch_product("1").status == "ok"
+    assert len(client.session.calls) == 2

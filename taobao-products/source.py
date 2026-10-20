@@ -44,6 +44,32 @@ class SourceError(RuntimeError):
     """Upstream could not be queried successfully."""
 
 
+class AuthenticationFailed(SourceError):
+    """The provider rejected our credentials (HTTP 401/403).
+
+    Raised rather than turned into an item status, and never retried: an
+    invalid key or a lapsed subscription is a fact about the whole run, not
+    about one listing, and will not fix itself on a second attempt.
+    """
+
+
+#: Statuses worth another try: rate limiting and the server's own failures.
+_RETRYABLE = (429, 500, 502, 503, 504)
+
+
+def _error_message(response: Any) -> str:
+    """The provider's own explanation, if its error body carries one."""
+    try:
+        body = json.loads(response.text)
+    except (ValueError, TypeError):
+        return (response.text or "").strip()[:200]
+    if isinstance(body, dict):
+        for key in ("message", "error", "ErrorDescription", "detail"):
+            if body.get(key):
+                return str(body[key])[:200]
+    return str(body)[:200]
+
+
 class RiskControlBlocked(SourceError):
     """Upstream reached the platform, and the platform refused.
 
@@ -493,6 +519,13 @@ class UpstreamSource:
         return params
 
     def _get(self, path: str, params: dict[str, Any]) -> Any:
+        """GET with retries for what can recover, and none for what cannot.
+
+        Rate limiting and server errors are retried with backoff. A rejected
+        key (401/403) raises AuthenticationFailed at once, and any other 4xx —
+        a wrong path, a malformed request — fails at once too: retrying either
+        only multiplies the wait. The provider's own message is kept.
+        """
         url = self.config.base_url.rstrip("/") + path
         last_error: Exception | None = None
         body: str | None = None
@@ -502,25 +535,33 @@ class UpstreamSource:
                 response = self.session.get(
                     url, params=params, timeout=self.config.timeout
                 )
-                if response.status_code in (429, 500, 502, 503, 504):
-                    raise SourceError(f"HTTP {response.status_code} from {path}")
-                response.raise_for_status()
-                body = response.text
-                break
-            except (requests.RequestException, SourceError) as exc:
+            except requests.RequestException as exc:
                 last_error = exc
-                if attempt == self.config.max_retries:
+            else:
+                code = response.status_code
+                if code in (401, 403):
+                    raise AuthenticationFailed(f"HTTP {code}: {_error_message(response)}")
+                if code in _RETRYABLE:
+                    last_error = SourceError(
+                        f"HTTP {code} from {path}: {_error_message(response)}"
+                    )
+                elif code >= 400:
+                    raise SourceError(f"HTTP {code} from {path}: {_error_message(response)}")
+                else:
+                    body = response.text
                     break
-                backoff = self.config.backoff_base * ((2**attempt) + random.uniform(0, 1.0))
-                LOG.warning(
-                    "GET %s failed (%s); retrying in %.1fs (attempt %d/%d)",
-                    path,
-                    exc,
-                    backoff,
-                    attempt + 1,
-                    self.config.max_retries,
-                )
-                time.sleep(backoff)
+            if attempt == self.config.max_retries:
+                break
+            backoff = self.config.backoff_base * ((2**attempt) + random.uniform(0, 1.0))
+            LOG.warning(
+                "GET %s failed (%s); retrying in %.1fs (attempt %d/%d)",
+                path,
+                last_error,
+                backoff,
+                attempt + 1,
+                self.config.max_retries,
+            )
+            time.sleep(backoff)
         if body is None:
             raise SourceError(f"GET {path} failed after retries: {last_error}")
 
@@ -549,6 +590,8 @@ class UpstreamSource:
         )
         try:
             payload = self._get(self.config.detail_path, params)
+        except AuthenticationFailed:
+            raise
         except RiskControlBlocked as exc:
             return RawProduct(
                 item_id=item_id,

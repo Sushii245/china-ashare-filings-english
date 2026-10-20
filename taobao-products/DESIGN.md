@@ -66,6 +66,15 @@ each found by reading it rather than by a test failing:
 (Those three are OneBound's conventions, kept for when it is added for
 Taobao.)
 
+### When the data source says no
+
+Failures are sorted by whether waiting helps. Rate limits (429) and server
+errors (5xx) are retried with backoff. A rejected key (401/403) is raised as
+`AuthenticationFailed` and ends the run with the provider's own message: it is
+a fact about the whole run, and treating it per listing made every listing
+read as unavailable while the run reported success. Any other 4xx fails the
+call at once. A non-JSON body is never retried either.
+
 ### Everything provider-specific travels with the source
 
 A provider differs in far more than its URL: its paths, its auth style, its

@@ -344,6 +344,20 @@ def _resolve_ids(
     return ids
 
 
+async def _fail_rejected_key(exc: Exception) -> None:
+    """End the run on a rejected key, saying so plainly.
+
+    Without this every listing reads as "unavailable", the breaker trips, and
+    the run reports success — pointing at the ids instead of the key.
+    """
+    await Actor.fail(
+        status_message=(
+            f"The data source rejected the API key ({exc}). Check the key, and "
+            "that its subscription is active."
+        )
+    )
+
+
 async def _push_and_charge(
     record: dict[str, Any], *, event: str, is_ppe: bool, so_far: int
 ) -> tuple[bool, bool]:
@@ -393,6 +407,9 @@ def _fetch_chunk(
     def one(item_id: str) -> normalize_mod.Product:
         try:
             raw = data_source.fetch_product(item_id)
+        except source_mod.AuthenticationFailed:
+            # Not one bad listing: every call will fail the same way.
+            raise
         except Exception as exc:  # one bad listing must not kill the chunk
             raw = source_mod.RawProduct(
                 item_id=item_id,
@@ -579,14 +596,18 @@ async def main() -> None:
                     "this input are ignored. Switch to full detail to fetch them."
                 )
             Actor.log.info("Listing mode: selling search hits for %r.", keyword)
-            returned, skipped, hit_limit = await _run_listing_mode(
-                data_source,
-                keyword=keyword,
-                platform=platform,
-                limit=limit,
-                quantity=quantity,
-                is_ppe=is_ppe,
-            )
+            try:
+                returned, skipped, hit_limit = await _run_listing_mode(
+                    data_source,
+                    keyword=keyword,
+                    platform=platform,
+                    limit=limit,
+                    quantity=quantity,
+                    is_ppe=is_ppe,
+                )
+            except source_mod.AuthenticationFailed as exc:
+                await _fail_rejected_key(exc)
+                return
             parts = [f"Returned {returned} listing-level record(s)"]
             if plan_capped:
                 parts.append(f"free Apify plan, limited to {limit}")
@@ -597,7 +618,11 @@ async def main() -> None:
             await Actor.set_status_message("; ".join(parts) + ".", is_terminal=True)
             return
 
-        item_ids = await asyncio.to_thread(_resolve_ids, actor_input, data_source, limit)
+        try:
+            item_ids = await asyncio.to_thread(_resolve_ids, actor_input, data_source, limit)
+        except source_mod.AuthenticationFailed as exc:
+            await _fail_rejected_key(exc)
+            return
         if not item_ids:
             await Actor.set_status_message(
                 "No listings to fetch: give Item IDs, Item URLs or a search keyword.",
@@ -648,14 +673,18 @@ async def main() -> None:
                 size,
                 " (all the charge limit still covers)" if size < wanted else "",
             )
-            products = await asyncio.to_thread(
-                _fetch_chunk,
-                data_source,
-                chunk,
-                quantity=quantity,
-                workers=concurrency,
-                platform=platform,
-            )
+            try:
+                products = await asyncio.to_thread(
+                    _fetch_chunk,
+                    data_source,
+                    chunk,
+                    quantity=quantity,
+                    workers=concurrency,
+                    platform=platform,
+                )
+            except source_mod.AuthenticationFailed as exc:
+                await _fail_rejected_key(exc)
+                return
 
             for product in products:
                 done += 1

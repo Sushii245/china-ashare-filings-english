@@ -125,7 +125,12 @@ def main(argv: list[str] | None = None) -> int:
             LOG.info("%s already captured, skipping (use --force to re-fetch)", item_id)
             continue
 
-        raw = client.fetch_product(item_id)
+        try:
+            raw = client.fetch_product(item_id)
+        except source_mod.AuthenticationFailed as exc:
+            # Every remaining id would fail the same way.
+            print(f"the data source rejected the key: {exc}", file=sys.stderr)
+            return 2
         spent += 1
 
         # Saved in the wrapper form so a refusal is replayable too.

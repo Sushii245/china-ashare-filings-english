@@ -45,6 +45,13 @@ a real response first (VALIDATION.md).
   while their data-source calls still cost.
 - A run stops early when its listings mostly come back unavailable: after ten
   failures making up more than half of those tried, or twenty in a row.
+- A rejected API key (HTTP 401/403) fails the run at once with the data
+  source's own reason. It used to be retried per listing, each listing then
+  read as "unavailable", and the run reported success — blaming the ids for an
+  expired key. Other client errors (a wrong path, 404) are no longer retried
+  either; rate limits and server errors still are.
+- A translated title that keeps a brand in Chinese stays in `titleEn`; only a
+  mostly-Chinese title is moved to `titleCn`.
 - `titleCn` and `titleEn` are kept apart, and a title with no Chinese in it is
   never put in `titleCn`.
 - `sourceTextCn` is filled where a value was read from listing text and null

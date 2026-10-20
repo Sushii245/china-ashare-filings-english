@@ -48,10 +48,20 @@ def _split_titles(primary: str | None, english: str | None) -> tuple[str | None,
     title_en = english
     if primary and not title_cn and not title_en:
         title_en = primary
-    if title_en and _CJK.search(title_en) and not title_cn:
+    if title_en and not title_cn and _mostly_cjk(title_en):
         # The "English" field is in fact Chinese: put it where it belongs.
+        # Mostly, not merely containing: a translated title often keeps the
+        # brand in Chinese ("策马 (Wholesale), camouflage T-shirt ..."), and
+        # one brand name does not make a title Chinese.
         title_cn, title_en = title_en, None
     return title_cn, title_en
+
+
+def _mostly_cjk(text: str) -> bool:
+    """True when CJK ideographs outnumber Latin letters."""
+    cjk = len(_CJK.findall(text))
+    latin = sum(1 for ch in text if ch.isascii() and ch.isalpha())
+    return cjk > latin
 
 
 def _as_list(value: Any) -> list[Any]:

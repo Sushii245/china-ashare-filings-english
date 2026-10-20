@@ -268,3 +268,20 @@ def test_a_number_serialised_as_a_string_is_not_cited():
     fv = [{"Name": "SalesInLast30Days", "Value": " 860 "}]
     sales = run(item(FeaturedValues=fv))["sales"]
     assert sales["count"] == 860 and sales["sourceTextCn"] is None
+
+
+# A real title from the 2026-10-20 search: English, with the brand left in
+# Chinese. One CJK character does not make a title Chinese.
+REAL_MIXED = "策马 (Wholesale), camouflage summer sports travel tactics T-shirt for training, with short sleeve, quick dry"
+
+
+def test_an_english_title_with_a_chinese_brand_stays_english():
+    record = run(item(OriginalTitle=None, Title=REAL_MIXED))
+    assert record["titleEn"] == REAL_MIXED
+    assert record["titleCn"] is None
+
+
+def test_a_mostly_chinese_title_in_the_english_slot_still_moves():
+    record = run(item(OriginalTitle=None, Title="策马迷彩服短袖男夏季快干 T恤"))
+    assert record["titleCn"] == "策马迷彩服短袖男夏季快干 T恤"
+    assert record["titleEn"] is None

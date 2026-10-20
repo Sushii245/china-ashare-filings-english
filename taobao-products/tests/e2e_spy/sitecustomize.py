@@ -31,3 +31,23 @@ if _LOG:
 
     source.FixtureSource.fetch_product = fetch_product
     source.FixtureSource.search_raw = search_raw
+
+    # Simulates a rejected key: every call raises the way the live client does
+    # on a 401/403. Used by the end-to-end tests of the Actor's failure path.
+    if os.environ.get("FETCH_SPY_REJECT_KEY"):
+
+        def _rejected():
+            return source.AuthenticationFailed(
+                "HTTP 403: You are not subscribed to this API."
+            )
+
+        def reject_fetch(self, item_id):
+            _record("fetch", item_id)
+            raise _rejected()
+
+        def reject_search(self, keyword, *, page=1):
+            _record("search", str(page))
+            raise _rejected()
+
+        source.FixtureSource.fetch_product = reject_fetch
+        source.FixtureSource.search_raw = reject_search
