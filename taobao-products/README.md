@@ -143,12 +143,16 @@ in for it in `meetsMinimumOrder`.
 
 ## Pricing
 
-Pay per event — you pay for records actually returned.
+Pay per event — you pay for records actually returned, plus a small fee per
+run.
 
-| Event | When it fires |
-|---|---|
-| `product-normalised` | A listing returned at full detail. |
-| `product-listed` | A record built from a search result, at listing level. |
+| Event | Price | When it fires |
+|---|---|---|
+| `product-normalised` | $0.012 ($12 / 1,000) | A listing returned at full detail. |
+| `product-listed` | $0.002 ($2 / 1,000) | A record built from a search result, at listing level. |
+| `apify-actor-start` | $0.01 | Once per run, per GB of memory (at least once) — one charge at the default 512 MB. |
+
+Platform usage is included; there is no separate compute charge.
 
 **You are not charged** for an id that does not exist, that the data source
 refused, or whose data could not be read. Those come back with a `status`

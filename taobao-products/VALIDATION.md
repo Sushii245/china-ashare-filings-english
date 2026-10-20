@@ -66,10 +66,13 @@ margin and pays for itself after about 2,900 products a month.
   of 2 detail calls in 1.8 s, three real OTAPI calls in all. One listing came
   back span-priced (variants at 20.8 / 21.8 / 23), so its quote is null as
   designed — a quote range would serve such listings better; noted for later.
-- **Left before publishing:** price `apify-actor-start` in the Monetization
-  settings (no code) — and add it to the README's pricing table when you do,
-  since buyers are told they pay only for records returned; throughput
-  measured against real latency; and the checks below.
+- **2026-10-20 — monetization active.** Pay per event, platform usage
+  included: `product-normalised` $0.012, `product-listed` $0.002,
+  `apify-actor-start` $0.01 (one per GB of memory, minimum one). Apify's
+  default `apify-default-dataset-item` event was removed, so records for ids
+  that could not be served stay free. The README pricing table matches.
+- **Left before publishing:** throughput measured against real latency, and
+  the checks below.
 
 ## Phase 0 — sign up (0 calls)
 
