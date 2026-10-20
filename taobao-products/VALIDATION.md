@@ -57,9 +57,12 @@ margin and pays for itself after about 2,900 products a month.
 - **2026-10-20 — abuse protections: done** in code (free-plan cap, failure
   circuit breaker), each with an end-to-end test that fails against the
   unprotected code.
+- **2026-10-20 — README and samples checked against real records.** The
+  examples now use real values; `samples/` holds real normalised records.
 - **Left before publishing:** price `apify-actor-start` in the Monetization
-  settings (no code), throughput measured against real latency, and the checks
-  below.
+  settings (no code) — and add it to the README's pricing table when you do,
+  since buyers are told they pay only for records returned; throughput
+  measured against real latency; and the checks below.
 
 ## Phase 0 — sign up (0 calls)
 
@@ -208,9 +211,9 @@ that the bogus id came back with a status and **was not billed**.
       (`T恤 批发`), 3 products and a quantity of 100: one search plus three
       listings, four calls. If Apify's daily automated run uses the prefilled
       input, that is 4 of Basic's 20 calls a day.
-- [ ] **Check the README's examples against real records.** Its JSON is the
-      Actor's output shape with illustrative values; once real records exist,
-      make sure nothing there promises a field the data source does not fill.
+- [x] **Check the README's examples against real records.** Done
+      2026-10-20: real values throughout; shipping, which the data source
+      leaves empty, is no longer promised anywhere.
 - [ ] Set `SOURCE_API_KEY` as an Actor secret, and run on the platform with
       `maxProducts: 2` before anything larger.
 

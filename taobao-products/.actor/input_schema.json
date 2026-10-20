@@ -27,7 +27,7 @@
     "detailLevel": {
       "title": "Detail level",
       "type": "string",
-      "description": "Full detail fetches each listing: SKU matrix, wholesale ladder, shipping, seller scores. Listing level sells the search results themselves — title, price, sales, seller, image — which is enough to shortlist on and costs a fraction, because one provider call returns a whole page. Listing level needs a search keyword.",
+      "description": "Full detail fetches each listing: the wholesale ladder and minimum order, variants, attributes and seller scores. Listing level sells the search results themselves — title, price, sales, supplier, image, and the ladder where the search result includes it (about half the time) — which is enough to shortlist on and costs a fraction, because one call returns a whole page. Listing level needs a search keyword.",
       "editor": "select",
       "default": "full",
       "enum": [

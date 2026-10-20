@@ -1,7 +1,7 @@
 {
   "actorOutputSchemaVersion": 1,
   "title": "Normalised products",
-  "description": "One record per listing: typed prices and sales figures, wholesale ladder, shipping terms, seller scores and the SKU matrix, each normalised field carrying its Chinese source text.",
+  "description": "One record per 1688 listing: typed prices, the wholesale ladder and a quote for your quantity, the minimum order, the 30-day sales figure labelled as such, seller scores, variants and attributes. Chinese and English titles in separate fields.",
   "properties": {
     "products": {
       "type": "string",

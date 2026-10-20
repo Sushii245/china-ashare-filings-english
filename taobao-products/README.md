@@ -2,50 +2,53 @@
 
 **Price the order you intend to place, not the headline on the listing.**
 
-On 1688 the price shown first is only the bottom rung of a wholesale ladder —
-`2-99件 ¥12.00 / 100-999件 ¥10.50 / ≥1000件 ¥9.00` — and the seller has a
-minimum order besides. Every other scraper hands you that headline, or the
-ladder as text, and leaves the arithmetic to you. This Actor does it: tell it
-how many pieces you want and each record comes back with the unit price at that
-quantity, the subtotal, which rung it landed on, and whether you clear the
-seller's minimum.
+On 1688 the price a listing leads with is the **cheapest** rung of its
+wholesale ladder — the price at the largest order. A real T-shirt listing
+heads at ¥3.14; its ladder starts at 2 pieces for ¥4.30. Every other scraper
+hands you the headline, or the ladder as text, and leaves the arithmetic to
+you. This Actor does it: tell it how many pieces you want and each record
+comes back with the unit price at that quantity, the subtotal, and whether you
+clear the seller's minimum.
 
 ---
 
 ## The quote
 
-Set **Order quantity to price**:
+Set **Order quantity to price**. The same real listing at 50 pieces:
 
 ```json
+"price":            { "value": 3.14, "currency": "CNY" },
+"originalPrice":    { "value": 3.3,  "currency": "CNY" },
+"minOrderQuantity": { "value": 2 },
+"priceTiers": [
+  { "minQty": 2,     "maxQty": 99,   "unitPrice": { "value": 4.3 } },
+  { "minQty": 100,   "maxQty": 9999, "unitPrice": { "value": 4.0 } },
+  { "minQty": 10000, "maxQty": null, "unitPrice": { "value": 3.3 } }
+],
 "quote": {
-  "quantity": 500,
-  "unitPrice": { "value": 10.5, "currency": "CNY" },
-  "subtotal": { "value": 5250.0, "currency": "CNY" },
+  "quantity": 50,
+  "unitPrice": { "value": 4.3,   "currency": "CNY" },
+  "subtotal":  { "value": 215.0, "currency": "CNY" },
   "meetsMinimumOrder": true
 }
 ```
 
-The ladder it walked is on the record too, as a sorted list with the top rung
-left open:
+Priced off the headline, those 50 pieces would have come to ¥157 — 27% short.
 
-```json
-"priceTiers": [
-  { "minQty": 2,    "maxQty": 99,   "unitPrice": { "value": 12.0 } },
-  { "minQty": 100,  "maxQty": 999,  "unitPrice": { "value": 10.5 } },
-  { "minQty": 1000, "maxQty": null, "unitPrice": { "value": 9.0 } }
-],
-"minOrderQuantity": { "value": 2 }
-```
-
-- Below the seller's minimum the quote is still priced, with
-  `meetsMinimumOrder: false` — you still want the number.
-- A ladder whose rungs overlap quotes the **dearer** matching rung. Nothing
-  says which the seller means, and understating an order is the harmful way to
-  be wrong.
-- A quantity that falls between rungs, or a listing with no ladder, is priced
-  off the listing price.
-- A listing priced as a span across variants has no single unit price to
-  resolve to, so `unitPrice` is `null` rather than quietly the low end.
+- The ladder is sorted, with the top rung left open (`maxQty: null`). Where a
+  rung gives only its starting quantity, it ends one below the next rung.
+- **Below the seller's minimum** the order is priced at the first rung and
+  flagged `meetsMinimumOrder: false` — you still want the number.
+- **Between rungs**, the rung below applies: a rung's price holds until the
+  next one begins.
+- **Overlapping rungs** quote the dearer one. Nothing says which the seller
+  means, and understating an order is the harmful way to be wrong.
+- **No ladder at all**: the listing price. A listing priced as a span across
+  variants has no single unit price to resolve to, so `unitPrice` is `null`
+  rather than quietly the low end.
+- **A promotion** shows as `price` with the regular price in `originalPrice`
+  and the difference in `discountPct`. The quote walks the published ladder,
+  which is priced at the regular rate.
 
 ## Sales figures that say what they measure
 
@@ -54,16 +57,20 @@ count the same thing. Each record says both:
 
 ```json
 "sales": {
-  "count": 860,
+  "count": 412,
   "isApproximate": false,
   "window": "last_30_days",
-  "unit": "orders"
+  "unit": null
 }
 ```
 
-`window` is `monthly`, `last_30_days` or `cumulative`; `unit` is `orders`,
-`buyers` or `items`. Where a figure is printed as text with a floor — `已售2万+`
-— `count` is the floor, `isApproximate` is true, and `2万` is read as 20,000.
+1688 listings carry several "sales" figures that measure different things —
+on one real listing, 8 in the last 30 days and 14.6 million cumulative. This
+Actor returns the 30-day figure and labels it as such. `window` is `monthly`,
+`last_30_days` or `cumulative`; `unit` is `orders`, `buyers` or `items` where
+the data says which, and `null` where it does not — as here, rather than a
+guess. Where a figure is printed as text with a floor — `已售2万+` — `count` is
+the floor, `isApproximate` is true, and `2万` is read as 20,000.
 
 ## Chinese and English, never mixed
 
@@ -72,21 +79,40 @@ one is available. A field named for Chinese never carries English: if the only
 title available is a translation, `titleCn` is `null` and the translation is in
 `titleEn`.
 
+## What else a full record carries
+
+- **The supplier**: its registered company name (`shopNameCn`) — not the
+  login name a listing sometimes shows — and its id.
+- **Three seller scores** out of 5: `description_match`, `service`,
+  `logistics`. The data source names them in English only, so `aspectCn` is
+  `null` rather than an invented Chinese label.
+- **Variants** with their axes in the seller's own Chinese
+  (`{"颜色": "白色", "尺码": "S"}`), each with a price and stock.
+- **Attributes** — material, style, target markets — in the seller's Chinese.
+  A property listed several times keeps every value: `"主要销售地区": "欧洲、南美、东南亚、…"`.
+
+Real records are in [`samples/`](samples/), generated from real data-source
+responses.
+
 ## Two detail levels
 
 **Full detail** fetches each listing: the ladder, the minimum order, the quote,
 variants, images, seller. One data-source call per listing.
 
 **Listing level** sells the search results themselves — title, price, sales,
-image — which is what you need to shortlist a hundred candidates. One call
-returns a whole page, so it costs a fraction. Set `detailLevel` to `listing`
-and give a `keyword`.
+supplier, image — which is what you need to shortlist a hundred candidates.
+One call returns a whole page of up to 50, so it costs a fraction. Set
+`detailLevel` to `listing` and give a `keyword`. About half of 1688's search
+results include the wholesale ladder too, and for those a listing-level record
+carries it and quotes your quantity.
 
 The usual shape of the work is both: shortlist wide and cheap at listing level,
 then re-run the handful you care about at full detail. Listing-level records
 carry `status: "listed"` rather than `"ok"`, and the fields a search result
-cannot carry — the ladder, variants, minimum order — come back empty, not
-null, so absent-from-search stays distinguishable from the-listing-was-silent.
+does not carry — variants, attributes, seller scores, the minimum order — come
+back empty, not null, so absent-from-search stays distinguishable from
+the-listing-was-silent. Without a stated minimum, a ladder's first rung stands
+in for it in `meetsMinimumOrder`.
 
 ---
 
@@ -161,8 +187,8 @@ cleanly at the limit.
 Public product and supplier listing data only: titles, prices and ladders,
 minimum orders, variants, images, supplier name. **No buyer identities, no
 reviewer names, no contact details, no personal data.** Data is obtained
-through a licensed commercial product-data API, not by circumventing the
-platform's access controls. Requests are rate limited.
+through a commercial product-data API, not by circumventing the platform's
+access controls. Requests are rate limited.
 
 ---
 
