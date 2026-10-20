@@ -257,3 +257,40 @@ def test_the_bogus_id_is_not_found():
     record = detail("1")
     assert record["status"] == "not_found"
     assert record["statusDetail"] == "NotFound: Item with id='1' not found."
+
+
+# ------------------------------------------------- a zero is not a price
+
+import copy  # noqa: E402
+
+
+def zeroed(item_id: str, mutate) -> dict:
+    hit = copy.deepcopy(next(h for h in HITS if h["Id"] == f"abb-{item_id}"))
+    mutate(hit)
+    return hit
+
+
+def test_a_zero_listing_price_is_unknown_not_free():
+    # 1688 shows "面议" (price on request) as a zero. Quoting it would tell
+    # the buyer the order is free — the most understated quote possible.
+    hit = zeroed("44153134578", lambda h: h["Price"].__setitem__("OriginalPrice", 0.0))
+    record = normalize_search_entry(hit, platform="1688", config=CONFIG, quantity=100).to_item()
+    assert record["price"] is None
+    assert record["quote"]["unitPrice"] is None
+    assert record["quote"]["subtotal"] is None
+
+
+def test_a_zero_rung_is_dropped_not_quoted():
+    hit = zeroed("623219903269", lambda h: h["QuantityRanges"][2]["Price"].__setitem__("OriginalPrice", 0.0))
+    record = normalize_search_entry(hit, platform="1688", config=CONFIG, quantity=8000).to_item()
+    assert [t["unitPrice"]["value"] for t in record["priceTiers"]] == [26.9, 25.9]
+    assert record["quote"]["unitPrice"]["value"] == 25.9
+
+
+def test_a_zero_promotion_falls_back_to_nothing_rather_than_free():
+    hit = zeroed("669724481680", lambda h: h["PromotionPrice"].__setitem__("OriginalPrice", 0.0))
+    record = normalize_search_entry(hit, platform="1688", config=CONFIG).to_item()
+    # The zero promotion is skipped and the regular price stands, not a null:
+    # each alternative of the price path is read on its own.
+    assert record["price"]["value"] == 3.3
+    assert record["discountPct"] is None

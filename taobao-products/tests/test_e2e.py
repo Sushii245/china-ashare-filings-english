@@ -342,3 +342,60 @@ def test_a_rejected_key_fails_a_listing_run_too(tmp_path):
     assert run.proc.returncode != 0
     assert run.searched_pages == [1]
     assert "rejected" in run.log
+
+
+# -------------------------------------------------- the search endpoint fails
+
+def status_of(run: Run) -> str:
+    return next(
+        (line.split("Terminal status message]: ", 1)[1]
+         for line in run.log.splitlines() if "Terminal status message" in line),
+        "",
+    )
+
+
+def test_listing_search_down_from_the_start_fails_cleanly(tmp_path):
+    # Used to crash with a traceback and exit 91, with no status at all.
+    run = run_actor(
+        tmp_path, {"keyword": "x", "detailLevel": "listing", "platform": "1688"},
+        FETCH_SPY_SEARCH_DOWN="1",
+    )
+    assert run.proc.returncode != 0
+    assert "Traceback" not in run.log
+    assert "search failed" in status_of(run) and "503" in status_of(run)
+
+
+def test_listing_search_down_later_keeps_what_it_delivered(tmp_path):
+    # Page 1 is a full 50 hits, so page 2 is asked for — and fails. The 50
+    # already delivered (and billed) stand; the run says why it stopped.
+    run = run_actor(
+        tmp_path,
+        {"keyword": "x", "detailLevel": "listing", "platform": "1688", "maxProducts": 100},
+        FETCH_SPY_SEARCH_DOWN="2",
+        ACTOR_SOURCE_FIXTURES=str(full_search_page(tmp_path / "page")),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert "Traceback" not in run.log
+    assert len(run.records) == 50
+    assert run.searched_pages == [1, 2]
+    assert "search page 2 failed" in status_of(run)
+
+
+def test_keyword_search_down_with_nothing_else_fails_cleanly(tmp_path):
+    run = run_actor(tmp_path, {"keyword": "x", "platform": "1688"}, FETCH_SPY_SEARCH_DOWN="1")
+    assert run.proc.returncode != 0
+    assert "Traceback" not in run.log
+    assert "search failed" in status_of(run)
+    assert run.fetched == []
+
+
+def test_keyword_search_down_still_fetches_the_ids_given(tmp_path):
+    run = run_actor(
+        tmp_path, {"itemIds": OK_IDS, "keyword": "x", "platform": "1688"},
+        FETCH_SPY_SEARCH_DOWN="1",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert "Traceback" not in run.log
+    assert sorted(run.fetched) == sorted(OK_IDS)
+    assert "search failed" in status_of(run)

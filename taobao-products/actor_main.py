@@ -284,6 +284,7 @@ def _resolve_ids(
     actor_input: dict[str, Any],
     data_source: source_mod.ProductSource,
     limit: int,
+    notes: list[str] | None = None,
 ) -> list[str]:
     """Collect ids from ids, URLs and a keyword search, in that order."""
     ids: list[str] = []
@@ -322,7 +323,19 @@ def _resolve_ids(
     page = 1
     while keyword and len(ids) < limit and page <= MAX_SEARCH_PAGES:
         before = len(ids)
-        batch = data_source.search(keyword, page=page)
+        try:
+            batch = data_source.search(keyword, page=page)
+        except source_mod.AuthenticationFailed:
+            raise
+        except source_mod.SourceError as exc:
+            # A search outage must not crash the run: the ids already in hand
+            # (given ones, earlier pages) are still worth fetching. The caller
+            # decides what to do if there are none.
+            message = f"search failed on page {page} ({exc})"
+            Actor.log.warning("Keyword %s; continuing with %d id(s).", message, len(ids))
+            if notes is not None:
+                notes.append(message)
+            break
         if not batch:
             break
         for found in batch:
@@ -449,7 +462,7 @@ async def _run_listing_mode(
     limit: int,
     quantity: int | None,
     is_ppe: bool,
-) -> tuple[int, int, bool]:
+) -> tuple[int, int, bool, tuple[int, str] | None]:
     """Sell the search response itself: one call per page, not per listing.
 
     A search hit carries the title, price, sales line, seller and an image —
@@ -459,6 +472,7 @@ async def _run_listing_mode(
     """
     returned = skipped = 0
     stop = False
+    search_error: tuple[int, str] | None = None
     seen: set[str] = set()
     page = 1
 
@@ -475,7 +489,16 @@ async def _run_listing_mode(
             )
             stop = True
             break
-        entries = await asyncio.to_thread(data_source.search_raw, keyword, page=page)
+        try:
+            entries = await asyncio.to_thread(data_source.search_raw, keyword, page=page)
+        except source_mod.AuthenticationFailed:
+            raise
+        except source_mod.SourceError as exc:
+            # Records already pushed were delivered and billed; keep them and
+            # say why the run stopped, rather than crash and lose the status.
+            search_error = (page, str(exc))
+            Actor.log.warning("Search page %d failed: %s", page, exc)
+            break
         if not entries:
             break
 
@@ -527,7 +550,7 @@ async def _run_listing_mode(
             break
         page += 1
 
-    return returned, skipped, stop
+    return returned, skipped, stop, search_error
 
 
 async def main() -> None:
@@ -597,7 +620,7 @@ async def main() -> None:
                 )
             Actor.log.info("Listing mode: selling search hits for %r.", keyword)
             try:
-                returned, skipped, hit_limit = await _run_listing_mode(
+                returned, skipped, hit_limit, search_error = await _run_listing_mode(
                     data_source,
                     keyword=keyword,
                     platform=platform,
@@ -608,7 +631,14 @@ async def main() -> None:
             except source_mod.AuthenticationFailed as exc:
                 await _fail_rejected_key(exc)
                 return
+            if search_error and not (returned or skipped):
+                await Actor.fail(
+                    status_message=f"The data source's search failed: {search_error[1]}"
+                )
+                return
             parts = [f"Returned {returned} listing-level record(s)"]
+            if search_error:
+                parts.append(f"search page {search_error[0]} failed ({search_error[1]})")
             if plan_capped:
                 parts.append(f"free Apify plan, limited to {limit}")
             if skipped:
@@ -618,10 +648,18 @@ async def main() -> None:
             await Actor.set_status_message("; ".join(parts) + ".", is_terminal=True)
             return
 
+        search_notes: list[str] = []
         try:
-            item_ids = await asyncio.to_thread(_resolve_ids, actor_input, data_source, limit)
+            item_ids = await asyncio.to_thread(
+                _resolve_ids, actor_input, data_source, limit, search_notes
+            )
         except source_mod.AuthenticationFailed as exc:
             await _fail_rejected_key(exc)
+            return
+        if not item_ids and search_notes:
+            await Actor.fail(
+                status_message=f"No listings to fetch: the data source's {search_notes[0]}."
+            )
             return
         if not item_ids:
             await Actor.set_status_message(
@@ -741,6 +779,8 @@ async def main() -> None:
             )
         if tripped:
             parts.append(f"stopped early because {tripped}, {len(pending)} not fetched")
+        if search_notes:
+            parts.append(f"keyword {search_notes[0]}")
         if plan_capped:
             parts.append(f"free Apify plan, limited to {limit}")
         await Actor.set_status_message("; ".join(parts) + ".", is_terminal=True)

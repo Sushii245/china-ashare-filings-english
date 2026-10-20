@@ -51,3 +51,21 @@ if _LOG:
 
         source.FixtureSource.fetch_product = reject_fetch
         source.FixtureSource.search_raw = reject_search
+
+    # Simulates a search endpoint that is down: retries exhausted. Pages listed
+    # in FETCH_SPY_SEARCH_DOWN fail ("1", or "2" to fail only later pages).
+    _down = os.environ.get("FETCH_SPY_SEARCH_DOWN")
+    if _down:
+        _down_pages = {int(p) for p in _down.split(",")}
+        _search_ok = source.FixtureSource.search_raw
+
+        def search_down(self, keyword, *, page=1):
+            if page in _down_pages:
+                _record("search", str(page))
+                raise source.SourceError(
+                    "GET /BatchSearchItemsFrame failed after retries: HTTP 503 from "
+                    "/BatchSearchItemsFrame: Service Unavailable"
+                )
+            return _search_ok(self, keyword, page=page)
+
+        source.FixtureSource.search_raw = search_down

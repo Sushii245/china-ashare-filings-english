@@ -75,6 +75,12 @@ a fact about the whole run, and treating it per listing made every listing
 read as unavailable while the run reported success. Any other 4xx fails the
 call at once. A non-JSON body is never retried either.
 
+A search that fails is handled where it is made, not left to crash the run:
+with nothing in hand the run fails with the reason, and with records already
+delivered or ids already given it carries on with those and records the
+failure in its status. An unhandled search error used to end the run with a
+traceback and exit code 91, and no status at all.
+
 ### Everything provider-specific travels with the source
 
 A provider differs in far more than its URL: its paths, its auth style, its

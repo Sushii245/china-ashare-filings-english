@@ -52,6 +52,14 @@ a real response first (VALIDATION.md).
   either; rate limits and server errors still are.
 - A translated title that keeps a brand in Chinese stays in `titleEn`; only a
   mostly-Chinese title is moved to `titleCn`.
+- A search the data source fails to answer no longer crashes the run with a
+  traceback. With nothing in hand the run fails with the data source's reason;
+  with records already delivered, or ids given alongside the keyword, it keeps
+  those and says in its status that the search stopped.
+- A zero is not a price: 1688 shows 面议 (price on request) as zero, and a
+  zero quoted as an order cost would read as free. A zero listing price is
+  null, a zero rung is dropped, and a zero promotion falls back to the regular
+  price.
 - `titleCn` and `titleEn` are kept apart, and a title with no Chinese in it is
   never put in `titleCn`.
 - `sourceTextCn` is filled where a value was read from listing text and null

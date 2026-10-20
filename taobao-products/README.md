@@ -169,6 +169,8 @@ cleanly at the limit.
   and may be absent.
 - **`stock` is flagged `isApproximate`** unless the data source is known to
   report an exact count. Treat it as an order of magnitude.
+- **Price on request (面议) comes back as a null price**, never as zero, so a
+  quote can never read as free.
 - **A quote is arithmetic on published prices.** It does not include shipping,
   which most 1688 listings settle per order with the seller.
 - **Runs on a free Apify plan are limited** to 3 listings at full detail, or

@@ -37,6 +37,34 @@ _BARE_NUMBER = re.compile(r"\d+(?:\.\d+)?")
 _CJK = re.compile(r"[\u3400-\u9fff\uf900-\ufaff]")
 
 
+def _positive(money: Money | None) -> Money | None:
+    """A product price, or None. Zero is not a price on 1688.
+
+    The platform shows 面议 (price on request) as a zero, and a zero quoted
+    would tell the buyer the order is free — the most understated quote there
+    is. Applied to product prices only: a zero shipping fee is real (包邮).
+    """
+    if money is None or money.value <= 0:
+        return None
+    return money
+
+
+def _price_at(payload: Any, path: str | None) -> Money | None:
+    """The first positive price among a path's alternatives.
+
+    Each alternative is parsed on its own, so ``PromotionPrice|Price`` falls
+    back to the regular price when the promotion reads as zero, rather than
+    stopping at the zero because it is not empty.
+    """
+    if not path:
+        return None
+    for alternative in path.split("|"):
+        found = _positive(units.parse_price(_scalar(dig(payload, alternative.strip()))))
+        if found is not None:
+            return found
+    return None
+
+
 def _split_titles(primary: str | None, english: str | None) -> tuple[str | None, str | None]:
     """Sort a provider's titles into (Chinese, English).
 
@@ -168,7 +196,7 @@ def _structured_skus(raw: Any, hint: dict[str, Any]) -> list[Sku]:
             Sku(
                 sku_id=_first_str(dig(entry, hint["id"])) if hint.get("id") else None,
                 options_cn=options,
-                price=units.parse_price(_scalar(dig(entry, hint["price"])))
+                price=_positive(units.parse_price(_scalar(dig(entry, hint["price"]))))
                 if hint.get("price")
                 else None,
                 stock=int(stock) if stock is not None else None,
@@ -195,7 +223,7 @@ def _normalize_skus(raw: Any, hint: dict[str, Any] | None = None) -> list[Sku]:
             Sku(
                 sku_id=_first_str(entry.get("sku_id") or entry.get("skuId")),
                 options_cn=options,
-                price=units.parse_price(_scalar(entry.get("price"))),
+                price=_positive(units.parse_price(_scalar(entry.get("price")))),
                 stock=int(stock) if stock is not None else None,
             )
         )
@@ -361,7 +389,7 @@ def _normalize_tiers(raw: Any, hint: dict[str, Any] | None = None) -> list[Price
             span_text = _first_str(entry)
             price_text = None
         span = units.parse_tier_range(span_text)
-        price = units.parse_price(price_text)
+        price = _positive(units.parse_price(price_text))
         if span is None or price is None:
             continue
         tiers.append(
@@ -386,7 +414,7 @@ def _structured_tiers(raw: Any, hint: dict[str, Any]) -> list[PriceTier]:
         max_raw = dig(entry, hint["max_qty"]) if hint.get("max_qty") else None
         price_raw = dig(entry, hint["price"]) if hint.get("price") else None
         low = units.parse_quantity(_scalar(min_raw))
-        price = units.parse_price(_scalar(price_raw))
+        price = _positive(units.parse_price(_scalar(price_raw)))
         if low is None or price is None:
             continue
         high = units.parse_quantity(_scalar(max_raw)) if max_raw is not None else None
@@ -476,10 +504,10 @@ def normalize(
     # OneBound docs define no price_range field — so the span is taken from the
     # SKU prices instead. It carries no source_text_cn, because the listing
     # never printed it as a range: a null there means "derived, not quoted".
-    original_price = units.parse_price(_scalar(field("original_price")))
-    price = units.parse_price(_scalar(field("price_range")))
+    original_price = _price_at(raw.payload, field_map.get("original_price"))
+    price = _price_at(raw.payload, field_map.get("price_range"))
     if price is None:
-        price = units.parse_price(_scalar(field("price")))
+        price = _price_at(raw.payload, field_map.get("price"))
         # The listing price counts as a candidate alongside the variants. A
         # listing at 9.90 with one variant priced 19.90 is a span, even though
         # only one variant carries a price of its own. But not when it is a
@@ -707,7 +735,7 @@ def normalize_search_entry(
             fetched_at=now,
         )
 
-    price = units.parse_price(_scalar(field("price")))
+    price = _price_at(entry, config.search_field_map.get("price"))
     stock_raw = _scalar(field("stock"))
     stock_value = (
         float(stock_raw) if isinstance(stock_raw, (int, float))
@@ -722,7 +750,7 @@ def normalize_search_entry(
         title_cn=title_cn,
         title_en=title_en,
         price=price,
-        original_price=units.parse_price(_scalar(field("original_price"))),
+        original_price=_price_at(entry, config.search_field_map.get("original_price")),
         sales=_sales(field("sales"), hints.get("sales")),
         price_tiers=_normalize_tiers(field("tiers"), hints.get("tiers")),
         stock=(
