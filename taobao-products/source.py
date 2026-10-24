@@ -34,6 +34,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Iterable, Protocol
+from xml.sax.saxutils import escape as xml_escape
 
 import requests
 
@@ -150,6 +151,13 @@ class SourceConfig:
     search_path: str = "/taobao/item_search"
     item_id_param: str = "num_iid"
     keyword_param: str = "q"
+    #: Search by reference image, where the provider serves one. OTAPI takes
+    #: its search conditions as an XML document in a single parameter, so an
+    #: image search is that document carrying an ImageUrl element rather than
+    #: a flat parameter; a provider with a flat one sets ``image_param``.
+    image_param: str | None = None
+    xml_params_param: str | None = None
+    xml_image_field: str = "ImageUrl"
     page_param: str = "page"
     extra_params: dict[str, str] = dataclasses.field(default_factory=dict)
     #: Minimum seconds between requests, enforced across every worker. This
@@ -225,6 +233,15 @@ class SourceConfig:
 
 
     @property
+    def serves_image_search(self) -> bool:
+        """Whether this provider takes a reference image at all.
+
+        Read before a run starts, so an image search against a provider that
+        cannot do one fails up front instead of spending a call on it.
+        """
+        return bool(self.image_param or self.xml_params_param)
+
+    @property
     def known_page_size(self) -> int | None:
         """The page size the provider is held to, if we set it ourselves.
 
@@ -281,9 +298,13 @@ class ProductSource(Protocol):
 
     def fetch_product(self, item_id: str) -> RawProduct: ...
 
-    def search(self, keyword: str, *, page: int = 1) -> list[str]: ...
+    def search(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ) -> list[str]: ...
 
-    def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]: ...
+    def search_raw(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ) -> list[dict[str, Any]]: ...
 
 
 _PATH_PART = re.compile(r"([^\[\]]*)((?:\[[^\]]*\])*)")
@@ -356,6 +377,50 @@ def looks_blocked(text: str) -> str | None:
     return None
 
 
+#: A reference image is read on the provider's side, so only a URL they can
+#: fetch themselves is any use: no data: URI, no local path.
+_HTTP_URL = re.compile(r"^https?://", re.IGNORECASE)
+
+
+def validate_image_url(image_url: str) -> str:
+    """The reference image URL, trimmed, or a refusal saying what is wrong."""
+    url = (image_url or "").strip()
+    if not _HTTP_URL.match(url):
+        raise SourceError(
+            "an image search needs a public http(s) image URL, not "
+            f"{image_url!r} — upload the picture somewhere the data source can "
+            "read it and pass that address"
+        )
+    return url
+
+
+def image_search_params(config: SourceConfig, image_url: str) -> dict[str, Any]:
+    """The request parameters that make a search a search-by-image.
+
+    OTAPI takes its search conditions as one XML document, so the image goes
+    inside it. The URL is escaped into the element: an unescaped ``&`` — which
+    an image URL carrying a query string has — would make the document invalid
+    and the search something other than what was asked for.
+
+    The image is the only condition sent. A provider front-end that dropped an
+    unknown parameter would then be searching with no condition at all, which
+    it refuses outright; pairing the image with a keyword would instead turn a
+    dropped image into a plausible page of billable, unrelated hits.
+    """
+    url = validate_image_url(image_url)
+    if config.image_param:
+        return {config.image_param: url}
+    if config.xml_params_param:
+        field = config.xml_image_field
+        return {
+            config.xml_params_param: (
+                f"<SearchItemsParameters><{field}>{xml_escape(url)}"
+                f"</{field}></SearchItemsParameters>"
+            )
+        }
+    raise SourceError("this data source does not serve search by image")
+
+
 class FixtureSource:
     """Replays payloads from a directory of JSON files.
 
@@ -415,20 +480,35 @@ class FixtureSource:
             )
         return RawProduct(item_id=item_id, platform=self.platform, payload=data)
 
-    def search(self, keyword: str, *, page: int = 1) -> list[str]:
-        """Fixture search returns every recorded id, ignoring the keyword."""
-        return _ids_from_hits(self.search_raw(keyword, page=page), self.config)
+    def search(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ) -> list[str]:
+        """Fixture search returns every recorded id, ignoring the query."""
+        return _ids_from_hits(
+            self.search_raw(keyword, page=page, image_url=image_url), self.config
+        )
 
-    def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]:
+    def search_raw(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ) -> list[dict[str, Any]]:
         """Replay a recorded search page, or synthesise one from the payloads.
 
         A ``_search.json`` captured by ``capture.py`` is used when present;
         otherwise each stored payload contributes the fields a search response
-        would have carried, so listing mode is testable without one.
+        would have carried, so listing mode is testable without one. An image
+        search replays ``_search_image.json`` where that was captured, so a
+        test can tell the two paths apart, and falls back to the keyword page
+        where it was not.
         """
         if page > 1:
             return []
-        recorded = self.directory / "_search.json"
+        if image_url is not None:
+            # Validated even in replay: a bad image URL should fail the same
+            # way in a fixture run as it would against the provider.
+            validate_image_url(image_url)
+        recorded = self.directory / "_search_image.json" if image_url else None
+        if recorded is None or not recorded.exists():
+            recorded = self.directory / "_search.json"
         if recorded.exists():
             data = json.loads(recorded.read_text(encoding="utf-8"))
             if isinstance(data, dict) and "payload" in data:
@@ -673,23 +753,41 @@ class UpstreamSource:
             return params
         return {self.config.page_param: page}
 
-    def search(self, keyword: str, *, page: int = 1) -> list[str]:
+    def search(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ) -> list[str]:
         """Return platform item ids for one page of results."""
-        return _ids_from_hits(self.search_raw(keyword, page=page), self.config)
+        return _ids_from_hits(
+            self.search_raw(keyword, page=page, image_url=image_url), self.config
+        )
 
-    def search_response(self, keyword: str, *, page: int = 1) -> Any:
+    def search_response(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ) -> Any:
         """One page of search, exactly as the provider returned it.
 
         ``capture.py`` saves this rather than the parsed hits: the first
         search against a new provider is the call that shows where its hits
         live, and keeping only the ids would throw that answer away.
+
+        With ``image_url`` the condition is the picture instead of the words;
+        everything else about the call — paging, credentials, spacing — is the
+        same, and so is the response shape.
         """
-        params = self._params(
-            **{self.config.keyword_param: keyword, **self._paging_params(page)}
+        # `is not None` rather than truthiness: an image given as an empty
+        # string is a mistake worth reporting, where falling through to the
+        # keyword would spend a call searching for nothing at all.
+        query = (
+            image_search_params(self.config, image_url)
+            if image_url is not None
+            else {self.config.keyword_param: keyword}
         )
+        params = self._params(**{**query, **self._paging_params(page)})
         return self._get(self.config.search_path, params)
 
-    def search_raw(self, keyword: str, *, page: int = 1) -> list[dict[str, Any]]:
+    def search_raw(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ) -> list[dict[str, Any]]:
         """One page of search results, as the provider returned them.
 
         The search response already carries a title, a price and an image per
@@ -697,7 +795,7 @@ class UpstreamSource:
         page of records, where fetching each listing in full is one call each.
         """
         return _hits_from_search_payload(
-            self.search_response(keyword, page=page), self.config
+            self.search_response(keyword, page=page, image_url=image_url), self.config
         )
 
 
@@ -764,6 +862,13 @@ def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
         search_path="/BatchSearchItemsFrame",
         item_id_param="itemId",
         keyword_param="ItemTitle",
+        # Search by picture goes through the same endpoint, with the image in
+        # OTAPI's xmlParameters document — the form their own BatchSearchItemsFrame
+        # example uses (docs.otapi.net, read 2026-10-25); there is no flat
+        # ImageUrl parameter documented, and guessing one would spend a call to
+        # find out.
+        xml_params_param="xmlParameters",
+        xml_image_field="ImageUrl",
         offset_param="framePosition",
         page_size_param="frameSize",
         page_size=page_size,

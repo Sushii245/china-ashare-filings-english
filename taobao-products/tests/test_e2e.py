@@ -206,6 +206,90 @@ def test_listing_mode_on_the_real_otapi_capture(tmp_path):
     assert quote["meetsMinimumOrder"] is False
 
 
+#: A product photo on the platform's own CDN — the address a buyer pastes
+#: when they have a listing image and no name for what is in it.
+IMAGE = "https://cbu01.alicdn.com/img/ibank/O1CN01ha5KYW1knTcju4X9C_!!2813694728-0-cib.jpg"
+
+
+def test_listing_mode_sells_a_search_by_image(tmp_path):
+    # The cheap path with a picture as the condition: one search call, a page
+    # of records, and the log saying plainly what was searched.
+    run = run_actor(
+        tmp_path,
+        {"imageUrl": IMAGE, "detailLevel": "listing", "platform": "1688"},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.searched_pages == [1]
+    assert run.fetched == []
+    assert len(run.records) == 5
+    assert {r["status"] for r in run.records} == {"listed"}
+    assert f"Searching by image: {IMAGE}" in run.log
+
+
+def test_full_detail_follows_a_search_by_image(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"imageUrl": IMAGE, "platform": "1688", "maxProducts": 3},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.searched_pages == [1]
+    assert len(run.fetched) == 3
+    assert len(run.records) == 3
+
+
+def test_a_keyword_given_with_an_image_is_ignored_and_said_so(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {
+            "imageUrl": IMAGE,
+            "keyword": "T恤 批发",
+            "detailLevel": "listing",
+            "platform": "1688",
+        },
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert "ignoring the keyword" in run.log
+
+
+def test_an_image_search_fails_before_any_call_when_the_source_has_none(tmp_path):
+    # The fixture source without a provider preset stands in for a data source
+    # that serves words only. The run must say so, not spend a call finding out.
+    run = run_actor(
+        tmp_path,
+        {"imageUrl": IMAGE, "detailLevel": "listing", "platform": "1688"},
+        **ppe(1.0),
+    )
+    assert run.proc.returncode != 0
+    assert run.searched_pages == []
+    assert "does not serve search by image" in run.log
+
+
+def test_an_unreadable_image_fails_before_any_call(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {
+            "imageUrl": "/Users/me/Desktop/sample.jpg",
+            "detailLevel": "listing",
+            "platform": "1688",
+        },
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode != 0
+    assert run.searched_pages == []
+    assert "public http(s) image URL" in run.log
+
+
 def test_full_detail_on_the_real_otapi_captures(tmp_path):
     # The whole Actor on three real detail responses and a real refusal:
     # quotes, billing, and the not-found id left unbilled.

@@ -50,6 +50,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--search", metavar="KEYWORD",
         help="also capture one page of search results (one extra billed call)",
     )
+    parser.add_argument(
+        "--search-image", metavar="IMAGE_URL",
+        help="also capture one page of search-by-image results for a public "
+             "image URL (one extra billed call). Saved as _search_image.json, "
+             "so a keyword page captured in the same run is kept alongside it.",
+    )
     parser.add_argument("--lang", help="pass a lang parameter, e.g. en")
     parser.add_argument(
         "--cache", default="yes", choices=("yes", "no"),
@@ -150,47 +156,59 @@ def main(argv: list[str] | None = None) -> int:
         )
         LOG.info("%s -> %s (%s)", item_id, target.name, raw.status)
 
-    if args.search:
-        target = out_dir / "_search.json"
+    searches = [
+        ("keyword", args.search, "_search.json"),
+        ("image", args.search_image, "_search_image.json"),
+    ]
+    for kind, query, filename in searches:
+        if not query:
+            continue
+        target = out_dir / filename
         if target.exists() and not args.force:
-            LOG.info("search already captured, skipping (use --force to re-fetch)")
-        else:
-            try:
-                # The raw response, not just the ids: the first search against
-                # a new provider is the call that shows where its hits live and
-                # what each one carries. Keeping only parsed ids — which, with
-                # an unaudited map, may well be none — would throw that away.
-                payload = client.search_response(args.search)
-                spent += 1
-                hits = source_mod._hits_from_search_payload(payload, config)
-                ids = source_mod._ids_from_hits(hits, config)
-                target.write_text(
-                    json.dumps(
-                        {
-                            "keyword": args.search,
-                            "provider": args.provider,
-                            "payload": payload,
-                            "ids": ids,
-                        },
-                        ensure_ascii=False,
-                        indent=1,
-                    )
-                    + "\n",
-                    encoding="utf-8",
+            LOG.info(
+                "%s search already captured, skipping (use --force to re-fetch)", kind
+            )
+            continue
+        try:
+            # The raw response, not just the ids: the first search against
+            # a new provider is the call that shows where its hits live and
+            # what each one carries. Keeping only parsed ids — which, with
+            # an unaudited map, may well be none — would throw that away.
+            if kind == "image":
+                payload = client.search_response(image_url=query)
+            else:
+                payload = client.search_response(query)
+            spent += 1
+            hits = source_mod._hits_from_search_payload(payload, config)
+            ids = source_mod._ids_from_hits(hits, config)
+            target.write_text(
+                json.dumps(
+                    {
+                        ("imageUrl" if kind == "image" else "keyword"): query,
+                        "provider": args.provider,
+                        "payload": payload,
+                        "ids": ids,
+                    },
+                    ensure_ascii=False,
+                    indent=1,
                 )
+                + "\n",
+                encoding="utf-8",
+            )
+            LOG.info(
+                "%s search %r -> %d hit(s) found by the current paths -> %s",
+                kind,
+                query,
+                len(hits),
+                target.name,
+            )
+            if not hits:
                 LOG.info(
-                    "search %r -> %d hit(s) found by the current paths -> %s",
-                    args.search,
-                    len(hits),
-                    target.name,
+                    "no hits at the configured paths; audit.py will show "
+                    "where they actually are"
                 )
-                if not hits:
-                    LOG.info(
-                        "no hits at the configured paths; audit.py will show "
-                        "where they actually are"
-                    )
-            except source_mod.SourceError as exc:
-                LOG.error("search failed: %s", exc)
+        except source_mod.SourceError as exc:
+            LOG.error("%s search failed: %s", kind, exc)
 
     LOG.info("billed calls this run: %d", spent)
     LOG.info("now run: python audit.py %s", out_dir)

@@ -238,6 +238,33 @@ maps exactly as live data would be. Without `SOURCE_PROVIDER` the replay uses
 the default map and proves nothing. Check the records, then check
 that the bogus id came back with a status and **was not billed**.
 
+## Image search — written, not yet proven live
+
+Search by picture (`imageUrl`) is implemented and tested against fixtures, but
+**no live call has been made for it**, so one thing stays unconfirmed: whether
+the RapidAPI front-end passes `xmlParameters` through to OTAPI. The parameter
+form itself is the provider's documented one.
+
+One call settles it:
+
+    python capture.py --provider otapi-1688 --api-key "$KEY" \
+        --search-image https://cbu01.alicdn.com/img/ibank/O1CN01ha5KYW1knTcju4X9C_!!2813694728-0-cib.jpg
+
+What the saved `_search_image.json` has to show:
+
+- hits at `Result.Items.Items.Content`, the same path as a keyword page — if
+  so, nothing else needs changing, and the capture becomes the fixture the
+  replay tests use instead of falling back to the keyword page;
+- an error about a missing or empty search condition means the front-end drops
+  `xmlParameters`; the fallback is then a flat `ImageUrl=` parameter
+  (`image_param` in `SourceConfig`, one more call to confirm);
+- hits that have nothing to do with the picture mean the parameter was taken
+  but ignored — the one outcome the code cannot detect, and the reason to read
+  this capture by eye.
+
+Use a picture already on 1688's own CDN for the first call: if a platform-hosted
+image finds nothing, the problem is the request, not the photo.
+
 ## Before publishing
 
 - [ ] Re-measure throughput against the real ~2.5 s latency and correct the

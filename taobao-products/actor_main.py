@@ -133,6 +133,22 @@ def _min_interval(actor_input: dict[str, Any]) -> float:
         return DEFAULT_MIN_INTERVAL
 
 
+def _image_url(actor_input: dict[str, Any]) -> str | None:
+    """The reference image to search by, or None if this run searches words.
+
+    The picture is fetched on the data source's side, so what belongs here is
+    an address they can read — a product photo on a shop, a marketplace CDN, a
+    file in this run's key-value store. A local path or a data: URI is refused
+    rather than sent, because the search would come back empty and still cost
+    a call.
+    """
+    raw = actor_input.get("imageUrl")
+    url = str(raw).strip() if raw not in (None, "") else ""
+    if not url:
+        return None
+    return source_mod.validate_image_url(url)
+
+
 def _max_moq(actor_input: dict[str, Any]) -> int | None:
     """The largest minimum order the buyer will accept, or None for no filter.
 
@@ -336,7 +352,11 @@ def _resolve_ids(
     screened: list[str] | None = None,
     screen_pages: int = MAX_SCREENED_PAGES,
 ) -> list[str]:
-    """Collect ids from ids, URLs and a keyword search, in that order.
+    """Collect ids from ids, URLs and a search, in that order.
+
+    The search is by keyword, or by reference image where the input gives one:
+    both return the same hits in the same shape, so everything after this —
+    the minimum-order screening, the paging, the per-page cost — is identical.
 
     With a minimum-order filter, search hits whose ladder already starts above
     it are left out here, before a detail call is spent on them, and their ids
@@ -378,18 +398,22 @@ def _resolve_ids(
     # page when a keyword has fewer results than a page holds, and every call
     # is billed, so "the page was not empty" is not enough to keep going.
     keyword = (actor_input.get("keyword") or "").strip()
+    image_url = _image_url(actor_input)
+    searching = f"image {image_url}" if image_url else f"keyword {keyword!r}"
     max_pages = MAX_SEARCH_PAGES if max_moq is None else screen_pages
     hits_seen: set[str] = set()
     page = 1
-    while keyword and len(ids) < limit and page <= max_pages:
+    while (keyword or image_url) and len(ids) < limit and page <= max_pages:
         try:
             if max_moq is None:
-                batch = data_source.search(keyword, page=page)
+                batch = data_source.search(keyword, page=page, image_url=image_url)
                 passing = batch
             else:
                 batch, passing = [], []
                 room = limit - len(ids)
-                for hit in data_source.search_raw(keyword, page=page):
+                for hit in data_source.search_raw(
+                    keyword, page=page, image_url=image_url
+                ):
                     product = normalize_mod.normalize_search_entry(
                         hit, platform=platform, config=data_source.config
                     )
@@ -411,7 +435,12 @@ def _resolve_ids(
             # (given ones, earlier pages) are still worth fetching. The caller
             # decides what to do if there are none.
             message = f"search failed on page {page} ({exc})"
-            Actor.log.warning("Keyword %s; continuing with %d id(s).", message, len(ids))
+            Actor.log.warning(
+                "Search by %s %s; continuing with %d id(s).",
+                searching,
+                message,
+                len(ids),
+            )
             if notes is not None:
                 notes.append(message)
             break
@@ -555,6 +584,7 @@ async def _run_listing_mode(
     is_ppe: bool,
     max_moq: int | None = None,
     screen_pages: int = MAX_SCREENED_PAGES,
+    image_url: str | None = None,
 ) -> tuple[int, int, int, bool, tuple[int, str] | None]:
     """Sell the search response itself: one call per page, not per listing.
 
@@ -588,7 +618,9 @@ async def _run_listing_mode(
             stop = True
             break
         try:
-            entries = await asyncio.to_thread(data_source.search_raw, keyword, page=page)
+            entries = await asyncio.to_thread(
+                data_source.search_raw, keyword, page=page, image_url=image_url
+            )
         except source_mod.AuthenticationFailed:
             raise
         except source_mod.SourceError as exc:
@@ -706,16 +738,38 @@ async def main() -> None:
         try:
             data_source = _build_source(actor_input, platform, min_interval)
             _check_platform_served(platform, data_source)
+            # Both before any call: a bad image URL, or a data source that
+            # does not serve pictures at all, is a certain miss, and a search
+            # page costs the same whether it finds anything or not.
+            image_url = _image_url(actor_input)
+            if image_url and not data_source.config.serves_image_search:
+                raise source_mod.SourceError(
+                    "this data source does not serve search by image; search by "
+                    "keyword instead, or name the listings by id"
+                )
         except (source_mod.SourceError, ValueError) as exc:
             await Actor.fail(status_message=str(exc))
             return
 
+        keyword = (actor_input.get("keyword") or "").strip()
+        if image_url:
+            Actor.log.info("Searching by image: %s", image_url)
+            if keyword:
+                # Mixing the two is not the same search, and which one the
+                # provider would honour is not ours to guess.
+                Actor.log.warning(
+                    "An image and a keyword were both given; searching by the "
+                    "image and ignoring the keyword %r.",
+                    keyword,
+                )
+                keyword = ""
+
         if detail_level == "listing":
-            keyword = (actor_input.get("keyword") or "").strip()
-            if not keyword:
+            if not keyword and not image_url:
                 await Actor.set_status_message(
                     "Listing mode sells the search response itself, so it needs "
-                    "a search keyword. Give one, or switch to full detail.",
+                    "a search keyword or an image URL. Give one, or switch to "
+                    "full detail.",
                     is_terminal=True,
                 )
                 return
@@ -724,7 +778,10 @@ async def main() -> None:
                     "Listing mode reads search results, so the ids and URLs in "
                     "this input are ignored. Switch to full detail to fetch them."
                 )
-            Actor.log.info("Listing mode: selling search hits for %r.", keyword)
+            Actor.log.info(
+                "Listing mode: selling search hits for %s.",
+                f"the image {image_url}" if image_url else repr(keyword),
+            )
             try:
                 returned, skipped, filtered, hit_limit, search_error = await _run_listing_mode(
                     data_source,
@@ -735,6 +792,7 @@ async def main() -> None:
                     is_ppe=is_ppe,
                     max_moq=max_moq,
                     screen_pages=screen_pages,
+                    image_url=image_url,
                 )
             except source_mod.AuthenticationFailed as exc:
                 await _fail_rejected_key(exc)
@@ -787,7 +845,8 @@ async def main() -> None:
             return
         if not item_ids:
             await Actor.set_status_message(
-                "No listings to fetch: give Item IDs, Item URLs or a search keyword.",
+                "No listings to fetch: give Item IDs, Item URLs, a search "
+                "keyword or an image URL.",
                 is_terminal=True,
             )
             return
@@ -920,7 +979,7 @@ async def main() -> None:
         if tripped:
             parts.append(f"stopped early because {tripped}, {len(pending)} not fetched")
         if search_notes:
-            parts.append(f"keyword {search_notes[0]}")
+            parts.append(("image " if image_url else "keyword ") + search_notes[0])
         if plan_capped:
             parts.append(f"free Apify plan, limited to {limit}")
         await Actor.set_status_message("; ".join(parts) + ".", is_terminal=True)

@@ -229,7 +229,9 @@ class PageIgnoringSource:
     def fetch_product(self, item_id: str):  # pragma: no cover - not used here
         raise AssertionError("not expected")
 
-    def search(self, keyword: str, *, page: int = 1) -> list[str]:
+    def search(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ) -> list[str]:
         self.calls += 1
         return list(self._ids)
 
@@ -262,7 +264,9 @@ class CountingSource:
             payload={"item": {"num_iid": item_id, "title": f"商品{item_id}", "price": "9.90"}},
         )
 
-    def search(self, keyword: str, *, page: int = 1):  # pragma: no cover
+    def search(
+        self, keyword: str = "", *, page: int = 1, image_url: str | None = None
+    ):  # pragma: no cover
         return []
 
 
@@ -417,7 +421,7 @@ class SizedPages:
     def fetch_product(self, item_id):  # pragma: no cover
         raise AssertionError("not expected")
 
-    def search(self, keyword, *, page=1):
+    def search(self, keyword="", *, page=1, image_url=None):
         self.calls += 1
         return self.ids[(page - 1) * self.size : page * self.size]
 

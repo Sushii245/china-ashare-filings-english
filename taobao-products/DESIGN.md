@@ -100,6 +100,31 @@ confirmed from the provider's own samples: `BatchGetItemFullInfo` and
 every request, stripped from everything returned. Its field maps are left empty
 until written from a real response; see `VALIDATION.md`.
 
+### Searching by picture
+
+OTAPI takes its search conditions as one XML document in a single
+`xmlParameters` parameter, and an image search is that document with an
+`ImageUrl` element — the form the provider's own `BatchSearchItemsFrame`
+example uses. There is no documented flat `ImageUrl` parameter beside the flat
+`ItemTitle` this Actor's keyword search uses, and guessing one would cost a
+billed call to find out, so `SourceConfig` carries both shapes
+(`image_param` for a provider with a flat one, `xml_params_param` for OTAPI's
+document) and the preset names the documented one.
+
+The image is sent as the **only** condition. The temptation is to pass the
+keyword along with it, but a provider front-end that dropped the image
+parameter would then run an ordinary keyword search, and in listing mode every
+hit of it is billed — a page of plausible, unrelated records that look like a
+successful image search. With the image alone, a dropped parameter leaves no
+condition at all, which the provider refuses outright. For the same reason an
+image URL the provider could not fetch, and a provider with no image search in
+its config, are refused before the call rather than after it.
+
+Everything downstream is unchanged: the hits come back in the same shape as a
+keyword page, so both detail levels, the quote, the minimum-order screening
+and the paging rules are shared, and an image search costs exactly what a
+keyword search costs.
+
 Two things the provider work changed in the shared code:
 
 * **Risk-control markers are never matched against a product record.** The

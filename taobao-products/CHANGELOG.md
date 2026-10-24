@@ -5,6 +5,16 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
+- Search by picture. `imageUrl` takes the web address of a product photo and
+  the data source matches it visually, instead of matching a keyword; both
+  detail levels, the quote, the minimum-order filter and the per-record price
+  are the same either way, at one call per page of results. The picture is the
+  only condition sent: pairing it with a keyword would turn a data source that
+  ignored the image into a page of plausible, billable, unrelated hits. An
+  image URL the data source could not fetch — a local path, a `data:` URI, a
+  bare host — and a data source that serves words only are both refused before
+  a call is spent, and an image given with a keyword searches the image and
+  says so in the log.
 - `maxMinOrderQuantity` keeps only listings whose minimum order is at most
   the number given. With a keyword, search hits whose ladder already starts
   above it are dropped before any detail call; ids given directly are checked

@@ -25,9 +25,9 @@ if _LOG:
         _record("fetch", item_id)
         return _fetch(self, item_id)
 
-    def search_raw(self, keyword, *, page=1):
+    def search_raw(self, keyword="", *, page=1, image_url=None):
         _record("search", str(page))
-        return _search(self, keyword, page=page)
+        return _search(self, keyword, page=page, image_url=image_url)
 
     source.FixtureSource.fetch_product = fetch_product
     source.FixtureSource.search_raw = search_raw
@@ -45,7 +45,7 @@ if _LOG:
             _record("fetch", item_id)
             raise _rejected()
 
-        def reject_search(self, keyword, *, page=1):
+        def reject_search(self, keyword="", *, page=1, image_url=None):
             _record("search", str(page))
             raise _rejected()
 
@@ -59,13 +59,13 @@ if _LOG:
         _down_pages = {int(p) for p in _down.split(",")}
         _search_ok = source.FixtureSource.search_raw
 
-        def search_down(self, keyword, *, page=1):
+        def search_down(self, keyword="", *, page=1, image_url=None):
             if page in _down_pages:
                 _record("search", str(page))
                 raise source.SourceError(
                     "GET /BatchSearchItemsFrame failed after retries: HTTP 503 from "
                     "/BatchSearchItemsFrame: Service Unavailable"
                 )
-            return _search_ok(self, keyword, page=page)
+            return _search_ok(self, keyword, page=page, image_url=image_url)
 
         source.FixtureSource.search_raw = search_down

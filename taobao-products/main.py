@@ -37,6 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="defaults to the provider's own platform; taobao without --provider",
     )
     parser.add_argument("--keyword", help="search instead of naming ids")
+    parser.add_argument(
+        "--image-url",
+        help="search by picture instead: a public http(s) product photo URL",
+    )
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument(
         "--quantity", type=int,
@@ -88,7 +92,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     item_ids = list(args.item_ids)
-    if args.keyword:
+    if args.image_url:
+        item_ids.extend(data_source.search(image_url=args.image_url))
+    elif args.keyword:
         item_ids.extend(data_source.search(args.keyword))
     if not item_ids and args.fixtures:
         item_ids = data_source.search("")
