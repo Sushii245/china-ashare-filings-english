@@ -5,6 +5,14 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
+- `maxMinOrderQuantity` keeps only listings whose minimum order is at most
+  the number given. With a keyword, search hits whose ladder already starts
+  above it are dropped before any detail call; ids given directly are checked
+  once fetched. Left-out listings are never billed and do not count towards
+  `maxProducts`. Screening pages for it stops after five pages, one on a free
+  plan, since every page is a call.
+- The README leads with what the Store's 1688 Issues show buyers want most:
+  runs that do not stall on captchas or risk-control blocks.
 - Priced to the market before publishing: full detail $0.005 (was $0.012),
   run start $0.005 (was $0.01), listing level unchanged at $0.002. Renamed
   "1688 Scraper — Wholesale Prices, MOQ & Order Quotes", the term the category

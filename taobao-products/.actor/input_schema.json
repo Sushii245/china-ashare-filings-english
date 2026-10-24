@@ -61,6 +61,14 @@
       "maximum": 1000000,
       "prefill": 100
     },
+    "maxMinOrderQuantity": {
+      "title": "Only sellers whose minimum order is at most",
+      "type": "integer",
+      "description": "Keep only listings whose minimum order (起订量) is this many pieces or fewer — e.g. 2 for samples or a small first order. With a keyword, search results whose price ladder already starts above it are dropped before any detail is fetched, so they cost you nothing. Listings left out are never billed and do not count towards Max products. A listing that states no minimum is kept. Leave empty to keep every listing.",
+      "editor": "number",
+      "minimum": 1,
+      "maximum": 1000000
+    },
     "maxProducts": {
       "title": "Max products",
       "type": "integer",

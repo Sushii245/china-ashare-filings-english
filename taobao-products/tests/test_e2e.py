@@ -399,3 +399,71 @@ def test_keyword_search_down_still_fetches_the_ids_given(tmp_path):
     assert "Traceback" not in run.log
     assert sorted(run.fetched) == sorted(OK_IDS)
     assert "search failed" in status_of(run)
+
+
+# ----------------------------------------------- minimum-order filter, e2e
+#
+# On the real capture the hits' ladders start at 1, 2 and 1 for
+# 623219903269, 669724481680 and 672715568844; 44153134578 and 590362159388
+# carry no ladder. A filter of 1 therefore screens out 669724481680 alone.
+
+
+def test_listing_mode_leaves_out_hits_over_the_moq_filter(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "detailLevel": "listing", "platform": "1688",
+         "maxMinOrderQuantity": 1},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.searched_pages == [1]
+    ids = [r["itemId"] for r in run.records]
+    assert "669724481680" not in ids
+    assert len(ids) == 4, "hits stating no minimum are kept"
+    assert "1 over the minimum-order filter (1) left out" in run.log
+
+
+def test_full_detail_never_fetches_a_hit_the_search_already_ruled_out(tmp_path):
+    # The point of screening at search time: a detail call is a billed call,
+    # and a listing the buyer filtered out can never be sold.
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "platform": "1688", "maxMinOrderQuantity": 1},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert "669724481680" not in run.fetched
+    assert sorted(run.fetched) == sorted(
+        ["44153134578", "623219903269", "672715568844", "590362159388"]
+    )
+
+
+def test_ids_given_directly_are_filtered_after_fetching_and_not_billed(tmp_path):
+    ids = ["623219903269", "669724481680", "672715568844"]
+    run = run_actor(
+        tmp_path,
+        {"itemIds": ids, "platform": "1688", "maxMinOrderQuantity": 1},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert sorted(run.fetched) == sorted(ids)
+    assert [r["itemId"] for r in run.records] == ["623219903269", "672715568844"]
+    assert "Returned 2 of 3 listing(s); 1 over the minimum-order filter (1) left out." in run.log
+
+
+def test_without_the_filter_nothing_is_left_out(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "detailLevel": "listing", "platform": "1688"},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert len(run.records) == 5
+    assert "minimum-order filter" not in run.log

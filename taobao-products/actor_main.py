@@ -56,6 +56,11 @@ ENV_FIXTURES = "ACTOR_SOURCE_FIXTURES"
 #: Upper bound on paid search calls per run, whatever the limit asks for.
 MAX_SEARCH_PAGES = 20
 
+#: The same bound while a minimum-order filter is screening the hits. A
+#: narrow filter can pass almost nothing on page after page, and every page
+#: is a call we pay for; past this many, the run returns what it found.
+MAX_SCREENED_PAGES = 5
+
 #: How many listings are fetched at once by default. The provider is a paid
 #: API billed per call, so the limit on throughput is its rate limit, not
 #: politeness; `min_interval` still spaces every request globally.
@@ -126,6 +131,49 @@ def _min_interval(actor_input: dict[str, Any]) -> float:
         return max(0.0, float(raw))
     except (TypeError, ValueError):
         return DEFAULT_MIN_INTERVAL
+
+
+def _max_moq(actor_input: dict[str, Any]) -> int | None:
+    """The largest minimum order the buyer will accept, or None for no filter.
+
+    Zero, negatives and anything that is not a number mean no filter rather
+    than a failed run: the filter only ever narrows what comes back.
+    """
+    raw = actor_input.get("maxMinOrderQuantity")
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _moq(product: normalize_mod.Product) -> int | None:
+    """The smallest order the seller takes, as far as the record says.
+
+    The stated minimum when there is one; otherwise where the ladder starts,
+    since the seller prices nothing below its first rung. A search hit
+    carries only the ladder, so this is how hits are screened before any
+    detail call is spent on them.
+    """
+    if product.min_order_quantity is not None:
+        return product.min_order_quantity.value
+    if product.price_tiers:
+        return product.price_tiers[0].min_qty
+    return None
+
+
+def _within_moq(product: normalize_mod.Product, max_moq: int | None) -> bool:
+    """Whether a listing passes the minimum-order filter.
+
+    A listing that states no minimum passes: nothing says it is over the
+    limit, and dropping it would hide sellers who take single pieces.
+    """
+    if max_moq is None:
+        return True
+    moq = _moq(product)
+    return moq is None or moq <= max_moq
 
 
 def _plan_limit(
@@ -285,8 +333,18 @@ def _resolve_ids(
     data_source: source_mod.ProductSource,
     limit: int,
     notes: list[str] | None = None,
+    screened: list[str] | None = None,
+    screen_pages: int = MAX_SCREENED_PAGES,
 ) -> list[str]:
-    """Collect ids from ids, URLs and a keyword search, in that order."""
+    """Collect ids from ids, URLs and a keyword search, in that order.
+
+    With a minimum-order filter, search hits whose ladder already starts above
+    it are left out here, before a detail call is spent on them, and their ids
+    go into ``screened``. Ids given directly are never screened here: there is
+    nothing to screen them on until they are fetched.
+    """
+    max_moq = _max_moq(actor_input)
+    platform = (actor_input.get("platform") or "1688").strip()
     ids: list[str] = []
     seen: set[str] = set()
 
@@ -320,11 +378,27 @@ def _resolve_ids(
     # page when a keyword has fewer results than a page holds, and every call
     # is billed, so "the page was not empty" is not enough to keep going.
     keyword = (actor_input.get("keyword") or "").strip()
+    max_pages = MAX_SEARCH_PAGES if max_moq is None else screen_pages
+    hits_seen: set[str] = set()
     page = 1
-    while keyword and len(ids) < limit and page <= MAX_SEARCH_PAGES:
-        before = len(ids)
+    while keyword and len(ids) < limit and page <= max_pages:
         try:
-            batch = data_source.search(keyword, page=page)
+            if max_moq is None:
+                batch = data_source.search(keyword, page=page)
+                passing = batch
+            else:
+                batch, passing = [], []
+                for hit in data_source.search_raw(keyword, page=page):
+                    product = normalize_mod.normalize_search_entry(
+                        hit, platform=platform, config=data_source.config
+                    )
+                    if not product.item_id:
+                        continue
+                    batch.append(product.item_id)
+                    if _within_moq(product, max_moq):
+                        passing.append(product.item_id)
+                    elif screened is not None and product.item_id not in screened:
+                        screened.append(product.item_id)
         except source_mod.AuthenticationFailed:
             raise
         except source_mod.SourceError as exc:
@@ -338,9 +412,13 @@ def _resolve_ids(
             break
         if not batch:
             break
-        for found in batch:
+        # Progress is judged on the page itself, not on what passed the
+        # filter: a page the filter empties is still a page of new results.
+        fresh = [found for found in batch if found not in hits_seen]
+        hits_seen.update(batch)
+        for found in passing:
             add(found)
-        if len(ids) == before:
+        if not fresh:
             Actor.log.info(
                 "Search page %d returned nothing new; stopping at %d id(s).",
                 page,
@@ -354,6 +432,14 @@ def _resolve_ids(
             break
         page += 1
 
+    if max_moq is not None and page > max_pages and len(ids) < limit:
+        Actor.log.warning(
+            "Searched %d pages for listings with a minimum order of at most %d "
+            "and found %d; stopping there rather than paying for more pages.",
+            max_pages,
+            max_moq,
+            len(ids),
+        )
     return ids
 
 
@@ -462,22 +548,29 @@ async def _run_listing_mode(
     limit: int,
     quantity: int | None,
     is_ppe: bool,
-) -> tuple[int, int, bool, tuple[int, str] | None]:
+    max_moq: int | None = None,
+    screen_pages: int = MAX_SCREENED_PAGES,
+) -> tuple[int, int, int, bool, tuple[int, str] | None]:
     """Sell the search response itself: one call per page, not per listing.
 
     A search hit carries the title, price, sales line, seller and an image —
     enough to shortlist on — and a page of them costs one provider call where
     fetching each listing in full costs a call each. That is why these bill at
     their own, much lower rate.
+
+    Hits over the minimum-order filter are dropped unbilled and do not count
+    towards the limit, so the run keeps paging for ones that pass — up to
+    MAX_SCREENED_PAGES, since every page is a call.
     """
-    returned = skipped = 0
+    returned = skipped = filtered = 0
     stop = False
     search_error: tuple[int, str] | None = None
     seen: set[str] = set()
     page = 1
+    max_pages = MAX_SEARCH_PAGES if max_moq is None else screen_pages
 
     charging = Actor.get_charging_manager()
-    while not stop and returned + skipped < limit and page <= MAX_SEARCH_PAGES:
+    while not stop and returned + skipped < limit and page <= max_pages:
         # A search page is one billed data-source call. If the run cannot pay
         # for even one more record, that call buys nothing deliverable.
         if is_ppe and charging.compute_push_data_limit(
@@ -515,6 +608,10 @@ async def _run_listing_mode(
                 seen.add(product.item_id)
             fresh += 1
 
+            if product.status == "listed" and not _within_moq(product, max_moq):
+                filtered += 1
+                continue
+
             record = product.to_item()
             if product.status != "listed":
                 await Actor.push_data(record)
@@ -550,7 +647,7 @@ async def _run_listing_mode(
             break
         page += 1
 
-    return returned, skipped, stop, search_error
+    return returned, skipped, filtered, stop, search_error
 
 
 async def main() -> None:
@@ -585,6 +682,10 @@ async def main() -> None:
         quantity = int(raw_quantity) if raw_quantity else None
         concurrency = max(1, min(10, int(actor_input.get("concurrency") or DEFAULT_CONCURRENCY)))
         min_interval = _min_interval(actor_input)
+        max_moq = _max_moq(actor_input)
+        # A free-plan run is sized to cost one search call; screening for
+        # the filter must not turn that into several.
+        screen_pages = 1 if plan_capped else MAX_SCREENED_PAGES
 
         # A non-monetised Actor (and any non-PPE pricing model) charges nothing,
         # so `charged_count` is always 0 there and must not be read as "limit
@@ -620,13 +721,15 @@ async def main() -> None:
                 )
             Actor.log.info("Listing mode: selling search hits for %r.", keyword)
             try:
-                returned, skipped, hit_limit, search_error = await _run_listing_mode(
+                returned, skipped, filtered, hit_limit, search_error = await _run_listing_mode(
                     data_source,
                     keyword=keyword,
                     platform=platform,
                     limit=limit,
                     quantity=quantity,
                     is_ppe=is_ppe,
+                    max_moq=max_moq,
+                    screen_pages=screen_pages,
                 )
             except source_mod.AuthenticationFailed as exc:
                 await _fail_rejected_key(exc)
@@ -643,15 +746,24 @@ async def main() -> None:
                 parts.append(f"free Apify plan, limited to {limit}")
             if skipped:
                 parts.append(f"{skipped} unusable and not billed")
+            if filtered:
+                parts.append(f"{filtered} over the minimum-order filter ({max_moq}) left out")
             if hit_limit:
                 parts.append("stopped at the run's charge limit")
             await Actor.set_status_message("; ".join(parts) + ".", is_terminal=True)
             return
 
         search_notes: list[str] = []
+        screened: list[str] = []
         try:
             item_ids = await asyncio.to_thread(
-                _resolve_ids, actor_input, data_source, limit, search_notes
+                _resolve_ids,
+                actor_input,
+                data_source,
+                limit,
+                search_notes,
+                screened,
+                screen_pages,
             )
         except source_mod.AuthenticationFailed as exc:
             await _fail_rejected_key(exc)
@@ -659,6 +771,13 @@ async def main() -> None:
         if not item_ids and search_notes:
             await Actor.fail(
                 status_message=f"No listings to fetch: the data source's {search_notes[0]}."
+            )
+            return
+        if not item_ids and screened:
+            await Actor.set_status_message(
+                f"No listings to fetch: all {len(screened)} search result(s) start "
+                f"their price ladder above a minimum order of {max_moq}.",
+                is_terminal=True,
             )
             return
         if not item_ids:
@@ -675,7 +794,7 @@ async def main() -> None:
             "Fetching %d at a time, at least %.2fs apart.", concurrency, min_interval
         )
 
-        returned = skipped = 0
+        returned = skipped = filtered = 0
         hit_charge_limit = False
         attempted = consecutive_unbilled = 0
         tripped: str | None = None
@@ -744,6 +863,17 @@ async def main() -> None:
                     )
                     continue
 
+                # Ids given directly, and hits with no ladder to screen on,
+                # are only checked here, once the listing states its minimum.
+                if not _within_moq(product, max_moq):
+                    filtered += 1
+                    Actor.log.info(
+                        "  left out, not billed: minimum order %s is over %d",
+                        _moq(product),
+                        max_moq,
+                    )
+                    continue
+
                 counted, hit_charge_limit = await _push_and_charge(
                     record, event=EVENT_PRODUCT, is_ppe=is_ppe, so_far=returned
                 )
@@ -771,6 +901,11 @@ async def main() -> None:
         parts = [f"Returned {returned} of {len(item_ids)} listing(s)"]
         if skipped:
             parts.append(f"{skipped} unavailable and not billed")
+        if filtered or screened:
+            parts.append(
+                f"{filtered + len(screened)} over the minimum-order filter "
+                f"({max_moq}) left out"
+            )
         if hit_charge_limit:
             unfetched = len(pending)
             parts.append(

@@ -488,3 +488,44 @@ def test_the_free_listing_cap_fits_in_one_search_page():
 )
 def test_breaker_reason(attempted, unbilled, consecutive, trips):
     assert (actor_main._breaker_reason(attempted, unbilled, consecutive) is not None) is trips
+
+
+# ------------------------------------------------------ minimum-order filter
+
+
+@pytest.mark.parametrize("raw,expected", [
+    (None, None), ("", None), (0, None), (-3, None), ("x", None),
+    (2, 2), ("10", 10), (2.0, 2),
+])
+def test_the_moq_filter_reads_only_a_positive_whole_number(raw, expected):
+    assert actor_main._max_moq({"maxMinOrderQuantity": raw}) == expected
+
+
+def _listed(min_order=None, first_rung=None):
+    from models import PriceTier, Money, Product, Quantity
+    product = Product(item_id="1", platform="1688", url="u", status="listed")
+    if min_order is not None:
+        product.min_order_quantity = Quantity(value=min_order)
+    if first_rung is not None:
+        product.price_tiers = [PriceTier(min_qty=first_rung, max_qty=None, unit_price=Money(value=1.0))]
+    return product
+
+
+def test_the_stated_minimum_wins_over_the_ladder():
+    assert actor_main._moq(_listed(min_order=5, first_rung=2)) == 5
+
+
+def test_a_search_hit_is_screened_on_where_its_ladder_starts():
+    # Hits carry no stated minimum; the seller prices nothing below rung one.
+    assert actor_main._moq(_listed(first_rung=100)) == 100
+
+
+@pytest.mark.parametrize("product,max_moq,passes", [
+    (_listed(min_order=2), 2, True),
+    (_listed(min_order=3), 2, False),
+    (_listed(first_rung=100), 50, False),
+    (_listed(), 1, True),             # states no minimum: kept
+    (_listed(min_order=500), None, True),
+])
+def test_within_moq(product, max_moq, passes):
+    assert actor_main._within_moq(product, max_moq) is passes

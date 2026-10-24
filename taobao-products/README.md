@@ -2,6 +2,19 @@
 
 **Price the order you intend to place, not the headline on the listing.**
 
+- **No captchas, no stalled runs.** This Actor does not scrape 1688's pages.
+  It reads listings through a commercial 1688 data API, so a run never sits on
+  a slider captcha, a risk-control block or a login wall until it times out.
+  A listing the data source cannot serve comes back with a `status` saying
+  why, and is not billed.
+- **A quote at your quantity.** Tell it how many pieces you want; each record
+  carries the unit price at that quantity, the subtotal, and whether you clear
+  the seller's minimum.
+- **Filter by minimum order.** Set `maxMinOrderQuantity` to 2 and only sellers
+  who take orders of 2 or fewer come back — useful for samples and first
+  orders. Listings left out are never billed.
+- **Pay for records returned**, not for attempts.
+
 On 1688 the price a listing leads with is the **cheapest** rung of its
 wholesale ladder — the price at the largest order. A real T-shirt listing
 heads at ¥3.14; its ladder starts at 2 pieces for ¥4.30. A scraper that hands
@@ -126,6 +139,7 @@ in for it in `meetsMinimumOrder`.
 | `keyword` | string | Search 1688, in Chinese or English. Required for listing level. |
 | `detailLevel` | enum | `full` fetches each listing; `listing` sells the search results, far cheaper. |
 | `quantity` | integer | Price every listing at this many pieces. |
+| `maxMinOrderQuantity` | integer | Keep only listings whose minimum order is at most this. With a keyword, hits over it are dropped before any detail call; left-out listings are never billed. Listings stating no minimum are kept. |
 | `maxProducts` | integer | Hard cap. Each listing returned with data is one billable event. |
 | `includeSkus` | boolean | Off keeps records small. `skuCount` still says how many variants there were. |
 | `concurrency` | integer | Listings fetched in parallel, 1–10. |
@@ -163,6 +177,10 @@ cleanly at the limit.
 
 ## Limits — read before you buy
 
+- **The minimum-order filter can only see what a search result shows.** At
+  listing level a hit is screened on where its price ladder starts; a hit with
+  no ladder is kept, and its stated minimum shows only at full detail, where
+  the filter checks it again before anything is billed.
 - **1688 only, for now.** Taobao and Tmall are planned. Asking for them today
   is refused before any work is done rather than returning empty records.
 - **`sourceTextCn` is often `null`, and that is deliberate.** The field holds
