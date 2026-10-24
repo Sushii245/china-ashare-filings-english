@@ -467,3 +467,18 @@ def test_without_the_filter_nothing_is_left_out(tmp_path):
     )
     assert len(run.records) == 5
     assert "minimum-order filter" not in run.log
+
+
+def test_hits_past_the_limit_are_not_reported_as_left_out(tmp_path):
+    # The first hit passes and fills maxProducts=1; 669724481680, further down
+    # the page, was never going to be fetched, so it was not "left out".
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "platform": "1688", "maxProducts": 1, "maxMinOrderQuantity": 1},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.fetched == ["44153134578"]
+    assert "minimum-order filter" not in run.log

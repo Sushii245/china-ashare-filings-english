@@ -388,6 +388,7 @@ def _resolve_ids(
                 passing = batch
             else:
                 batch, passing = [], []
+                room = limit - len(ids)
                 for hit in data_source.search_raw(keyword, page=page):
                     product = normalize_mod.normalize_search_entry(
                         hit, platform=platform, config=data_source.config
@@ -395,6 +396,10 @@ def _resolve_ids(
                     if not product.item_id:
                         continue
                     batch.append(product.item_id)
+                    if len(passing) >= room:
+                        # Enough already: hits past this point were never
+                        # going to be fetched, so they were not "left out".
+                        continue
                     if _within_moq(product, max_moq):
                         passing.append(product.item_id)
                     elif screened is not None and product.item_id not in screened:
