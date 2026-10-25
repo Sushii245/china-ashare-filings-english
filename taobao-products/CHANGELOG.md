@@ -5,11 +5,25 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
-- The picture for an image search can be uploaded in the input form, not only
-  pasted as a link, and either way the address is read once — free, on the
-  image's own host — before any billed search: a link that 404s, sits behind a
-  login or serves a web page fails the run with that reason, where before it
-  would have been a paid search that matched nothing.
+- A search the data source refused is raised, not read as a page with no
+  hits. Details were always checked for an error in the body; search was not,
+  so a refused search looked exactly like a search that found nothing — a run
+  that succeeded, returned nothing, and never said the search had not
+  happened. Found by the first live image search, which did precisely that.
+- Search by picture is written and tested but **not offered**: this data
+  source accepts the request and then refuses it with "the application
+  'Storage' is not available", its own file-storage service, which its image
+  search needs. Its paid tiers differ only in quota, so the input stays out of
+  the form until a data source serves it. What the code does hold, proven
+  against real responses: the image goes out under the flat `ImageUrl`
+  parameter the provider's playground documents, not inside OTAPI's
+  `xmlParameters` document (refused: "Search parameters must have at least one
+  of these values: CategoryId, VendorName, VendorId, ItemTitle, BrandId,
+  Configurators"); an image search is given minutes rather than the 30 s a
+  keyword search needs, and one retry rather than three, since each attempt is
+  billed; the picture is the only condition sent, so an ignored image cannot
+  come back as a page of billable keyword hits; and an unreadable image
+  address is refused before any billed call, read once on the image's own host.
 - Search by picture. `imageUrl` takes the web address of a product photo and
   the data source matches it visually, instead of matching a keyword; both
   detail levels, the quote, the minimum-order filter and the per-record price

@@ -238,32 +238,53 @@ maps exactly as live data would be. Without `SOURCE_PROVIDER` the replay uses
 the default map and proves nothing. Check the records, then check
 that the bogus id came back with a status and **was not billed**.
 
-## Image search — written, not yet proven live
+## Image search — proven impossible on this data source (7 calls)
 
-Search by picture (`imageUrl`) is implemented and tested against fixtures, but
-**no live call has been made for it**, so one thing stays unconfirmed: whether
-the RapidAPI front-end passes `xmlParameters` through to OTAPI. The parameter
-form itself is the provider's documented one.
+Four platform runs on 2026-10-25, build tag `image-test` so nothing buyers
+run was touched. Each step's real response, in order:
 
-One call settles it:
+1. **OTAPI's documented `xmlParameters` document** (`<SearchItemsParameters>`
+   `<ImageUrl>…</ImageUrl></SearchItemsParameters>`) — the form its own
+   `BatchSearchItemsFrame` example uses. Refused:
 
-    python capture.py --provider otapi-1688 --api-key "$KEY" \
-        --search-image https://cbu01.alicdn.com/img/ibank/O1CN01ha5KYW1knTcju4X9C_!!2813694728-0-cib.jpg
+       ContractViolation: Search parameters must have at least one of these
+       values: CategoryId, VendorName, VendorId, ItemTitle, BrandId, Configurators
 
-What the saved `_search_image.json` has to show:
+   So the document does reach OTAPI, and `ImageUrl` is not a condition its
+   validator counts. The first of these runs *looked like a success*: zero
+   records, exit 0, 0.3 s — because a search response was never checked for an
+   error in its body. That is fixed (`search_raw` raises), and it is the one
+   finding here that changes the keyword path too.
+2. **The flat `ImageUrl` parameter**, as this host's own RapidAPI playground
+   documents it beside `ItemTitle`, `OrderBy`, `MinPrice`, `MaxPrice` and
+   `MinVolume`. Accepted — no contract violation — but it timed out at 30 s,
+   four attempts, about two billed minutes. A keyword search answers in ~2.5 s;
+   fetching a picture and running a visual match is different work.
+3. **Flat parameter, 180 s, one retry.** An answer after 65 s:
 
-- hits at `Result.Items.Items.Content`, the same path as a keyword page — if
-  so, nothing else needs changing, and the capture becomes the fixture the
-  replay tests use instead of falling back to the keyword page;
-- an error about a missing or empty search condition means the front-end drops
-  `xmlParameters`; the fallback is then a flat `ImageUrl=` parameter
-  (`image_param` in `SourceConfig`, one more call to confirm);
-- hits that have nothing to do with the picture mean the parameter was taken
-  but ignored — the one outcome the code cannot detect, and the reason to read
-  this capture by eye.
+       NotAvailable: The application 'Storage' is not available.
 
-Use a picture already on 1688's own CDN for the first call: if a platform-hosted
-image finds nothing, the problem is the request, not the photo.
+   OTAPI's file-storage service — the part its image search needs to hold the
+   picture. Nothing on our side sends it anywhere else to fix.
+
+RapidAPI's four tiers for this API (Basic, Pro $25, Ultra $150, Mega $350)
+differ only in requests a day and bandwidth, with no feature list, so
+upgrading is not expected to turn Storage on.
+
+**State:** the Actor's side is finished and tested — flat `ImageUrl`, its own
+timeout and retry budget, image-only condition, a free reachability check on
+the picture before any billed call, and a refused search that is raised rather
+than read as empty. The input is `hidden` and the Store text promises nothing.
+
+**To finish it, one of:**
+
+- ask the provider (RapidAPI support / OTAPI) to enable the Storage
+  application for this instance, and re-run step 3 — one call to confirm;
+- add a second data-source preset for a provider whose 1688 image search is
+  live (tmapi.top and dajisaas both document an `img_url`-style endpoint).
+  `SourceConfig.image_param` is exactly the hook, so this is a preset plus a
+  capture, not a rewrite;
+- leave it shelved. Nothing is billed for it either way.
 
 ## Before publishing
 

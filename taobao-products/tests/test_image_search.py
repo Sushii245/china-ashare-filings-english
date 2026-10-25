@@ -63,13 +63,16 @@ def _otapi_client(body: str | None = None) -> source_mod.UpstreamSource:
 # --------------------------------------------------------------- the wire form
 
 
-def test_the_image_goes_out_as_the_provider_documents_it():
+def test_the_image_goes_out_under_the_parameter_the_provider_documents():
+    # ImageUrl as a flat query parameter, per this host's own playground and a
+    # real run. A hand-written xmlParameters document — OTAPI's generic form —
+    # was refused: "Search parameters must have at least one of these values:
+    # CategoryId, VendorName, VendorId, ItemTitle, BrandId, Configurators".
     client = _otapi_client()
     client.search_raw(image_url=IMAGE)
     sent = client.session.calls[0]
-    assert sent["xmlParameters"] == (
-        f"<SearchItemsParameters><ImageUrl>{IMAGE}</ImageUrl></SearchItemsParameters>"
-    )
+    assert sent["ImageUrl"] == IMAGE
+    assert "xmlParameters" not in sent
     assert sent["framePosition"] == 0
     assert sent["language"] == "en"
 
@@ -81,22 +84,17 @@ def test_the_picture_is_the_only_condition_sent():
     client.search_raw("T恤 批发", image_url=IMAGE)
     sent = client.session.calls[0]
     assert "ItemTitle" not in sent
-    assert IMAGE in sent["xmlParameters"]
+    assert sent["ImageUrl"] == IMAGE
 
 
-def test_an_image_url_with_a_query_string_survives_the_xml():
-    # Unescaped, the & ends the element and the provider is handed a document
-    # describing a different image, or none.
+def test_the_url_is_sent_as_given():
+    # requests encodes the query string, so nothing here may pre-escape it.
     url = "https://shop.example/p.jpg?w=800&h=600"
     params = source_mod.image_search_params(source_mod.otapi_1688_config("k"), url)
-    assert params["xmlParameters"] == (
-        "<SearchItemsParameters><ImageUrl>"
-        "https://shop.example/p.jpg?w=800&amp;h=600"
-        "</ImageUrl></SearchItemsParameters>"
-    )
+    assert params == {"ImageUrl": url}
 
 
-def test_a_flat_image_parameter_is_used_when_a_provider_has_one():
+def test_a_provider_naming_the_parameter_differently_is_followed():
     config = source_mod.SourceConfig(base_url="https://provider.example", image_param="img_url")
     assert source_mod.image_search_params(config, IMAGE) == {"img_url": IMAGE}
 
@@ -298,3 +296,101 @@ def test_a_run_with_neither_searches_nothing():
 )
 def test_reading_the_image_url_out_of_the_input(value, expected):
     assert actor_main._image_url({"imageUrl": value}) == expected
+
+
+# ------------------------------------------- a refused search is not an empty one
+
+
+def test_a_search_the_provider_refused_is_raised_not_read_as_empty():
+    # The first live image search came back as a successful run with no
+    # records in 0.3s: the body carried the provider's error and the hit
+    # scan simply found no hits at the configured paths. Details were always
+    # checked this way; search was not.
+    body = json.dumps(
+        {"ErrorCode": "InvalidParameters", "ErrorDescription": "xmlParameters is required"}
+    )
+    client = _otapi_client(body)
+    with pytest.raises(source_mod.SourceError, match="refused the search"):
+        client.search_raw(image_url=IMAGE)
+
+
+def test_a_successful_search_body_still_reads_as_success():
+    # OTAPI writes ErrorCode "Ok" on a good response; that must not read as
+    # an error, or every keyword search fails.
+    body = json.dumps(
+        {
+            "ErrorCode": "Ok",
+            "Result": {"Items": {"Items": {"Content": [{"Id": "abb-1"}]}}},
+        }
+    )
+    assert _otapi_client(body).search(image_url=IMAGE) == ["1"]
+
+
+def test_the_raw_response_is_still_returned_for_a_capture():
+    # capture.py saves search_response(): a refusal is exactly the payload
+    # worth keeping, so the raising belongs in search_raw, not there.
+    body = json.dumps({"ErrorCode": "InvalidParameters"})
+    assert _otapi_client(body).search_response(image_url=IMAGE) == {
+        "ErrorCode": "InvalidParameters"
+    }
+
+
+# --------------------------------------------- an image search is slow work
+
+
+class _SlowSession:
+    """Records the timeout each call was given."""
+
+    def __init__(self, body='{"ErrorCode": "Ok", "Result": {"Items": {"Items": {"Content": []}}}}'):
+        self.body = body
+        self.timeouts: list[float | None] = []
+        self.headers: dict[str, str] = {}
+
+    def get(self, url, params=None, timeout=None):
+        self.timeouts.append(timeout)
+        host = self
+
+        class R:
+            status_code = 200
+            text = host.body
+
+            def raise_for_status(inner):
+                pass
+
+        return R()
+
+
+def test_an_image_search_is_given_minutes_where_a_keyword_gets_seconds():
+    # A real 30s keyword-sized budget timed out: the provider fetches the
+    # picture and runs a visual match before it can answer.
+    client = _otapi_client()
+    session = _SlowSession()
+    client.session = session  # type: ignore[assignment]
+    client.search_raw("T恤 批发")
+    client.search_raw(image_url=IMAGE)
+    keyword_budget, image_budget = session.timeouts
+    assert keyword_budget == 30.0
+    assert image_budget == 180.0
+
+
+def test_a_timed_out_image_search_is_retried_once_not_three_times():
+    # Each attempt is a billed minute, and a visual search that did not
+    # answer in three minutes rarely answers on the next try.
+    import requests
+
+    class _Timeouts:
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url, params=None, timeout=None):
+            self.calls += 1
+            raise requests.ConnectTimeout("read timed out")
+
+    client = _otapi_client()
+    client.config.backoff_base = 0.0
+    client.session = _Timeouts()  # type: ignore[assignment]
+    with pytest.raises(source_mod.SourceError):
+        client.search_raw(image_url=IMAGE)
+    assert client.session.calls == 2

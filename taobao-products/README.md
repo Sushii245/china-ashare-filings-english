@@ -13,9 +13,6 @@
 - **Filter by minimum order.** Set `maxMinOrderQuantity` to 2 and only sellers
   who take orders of 2 or fewer come back — useful for samples and first
   orders. Listings left out are never billed.
-- **Search by picture.** Paste the address of a product photo instead of a
-  keyword and the search runs on the image — the way to find a supplier for
-  something you can see but cannot name in Chinese.
 - **Pay for records returned**, not for attempts.
 
 On 1688 the price a listing leads with is the **cheapest** rung of its
@@ -119,7 +116,7 @@ variants, images, seller. One data-source call per listing.
 **Listing level** sells the search results themselves — title, price, sales,
 supplier, image — which is what you need to shortlist a hundred candidates.
 One call returns a whole page of up to 50, so it costs a fraction. Set
-`detailLevel` to `listing` and give a `keyword` or an image. About half of 1688's search
+`detailLevel` to `listing` and give a `keyword`. About half of 1688's search
 results include the wholesale ladder too, and for those a listing-level record
 carries it and quotes your quantity.
 
@@ -133,52 +130,16 @@ in for it in `meetsMinimumOrder`.
 
 ---
 
-## Search by image
-
-A photo is often all you have: a competitor's listing image, a sample on the
-desk, a screenshot from a supplier's catalogue. Guessing the Chinese keyword
-for it is the slow part of sourcing.
-
-Drop the picture into **Search by image** — upload it in the input form, or
-paste its web address — and leave the keyword empty. The search then runs on
-the image, and everything else works exactly as it does for a keyword: both
-detail levels, the quote at your quantity, the minimum-order filter, the same
-records, the same price per record — one data-source call per page of
-results.
-
-```json
-{
-  "imageUrl": "https://cbu01.alicdn.com/img/ibank/O1CN01ha5KYW1knTcju4X9C_!!2813694728-0-cib.jpg",
-  "detailLevel": "listing",
-  "quantity": 100,
-  "maxProducts": 50
-}
-```
-
-The picture is fetched by the data source, not by this Actor, so an address
-you paste has to be a public `http(s)` one. Before any billed call the run
-reads the address itself: a link that 404s, one behind a login, or one that
-serves a web page rather than an image fails the run then and there, with the
-reason, instead of coming back as an empty search you paid for. Reading the
-image's own host costs nothing.
-
-Given an image **and** a keyword, the image wins and the run says so in its
-log: the two are different searches, and silently blending them would make it
-impossible to tell which results you got.
-
----
-
 ## Input
 
 | Field | Type | Description |
 |---|---|---|
 | `itemIds` | array | 1688 offer ids. A pasted listing URL works too. |
 | `itemUrls` | array | 1688 listing URLs; the offer id is read out of each. |
-| `keyword` | string | Search 1688, in Chinese or English. Required for listing level, unless you search by image. |
-| `imageUrl` | string | Search by picture: upload a photo, or paste a public `http(s)` address. Wins over `keyword` when both are given. |
+| `keyword` | string | Search 1688, in Chinese or English. Required for listing level. |
 | `detailLevel` | enum | `full` fetches each listing; `listing` sells the search results, far cheaper. |
 | `quantity` | integer | Price every listing at this many pieces. |
-| `maxMinOrderQuantity` | integer | Keep only listings whose minimum order is at most this. When searching, hits over it are dropped before any detail call; left-out listings are never billed. Listings stating no minimum are kept. |
+| `maxMinOrderQuantity` | integer | Keep only listings whose minimum order is at most this. With a keyword, hits over it are dropped before any detail call; left-out listings are never billed. Listings stating no minimum are kept. |
 | `maxProducts` | integer | Hard cap. Each listing returned with data is one billable event. |
 | `includeSkus` | boolean | Off keeps records small. `skuCount` still says how many variants there were. |
 | `concurrency` | integer | Listings fetched in parallel, 1–10. |
@@ -222,12 +183,6 @@ cleanly at the limit.
   the filter checks it again before anything is billed.
 - **1688 only, for now.** Taobao and Tmall are planned. Asking for them today
   is refused before any work is done rather than returning empty records.
-- **An image search is only as good as the picture.** The visual match is the
-  data source's, not this Actor's: a clean shot of the product itself finds
-  its listings, where a photo crowded with other objects, a screenshot with
-  text over it or a very small image finds little. A picture that matches
-  nothing comes back as an empty run, and the search page it cost is spent
-  whether it matched or not.
 - **`sourceTextCn` is often `null`, and that is deliberate.** The field holds
   the Chinese text a value was read from, where there was text. Most figures
   here arrive as typed numbers rather than listing text, and for those there is

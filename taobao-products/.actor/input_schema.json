@@ -27,8 +27,8 @@
     "imageUrl": {
       "title": "Search by image",
       "type": "string",
-      "description": "Find the listing from a picture instead of words — a competitor's product photo, a shot of a sample. Upload the picture here, or paste its web address. Either way the data source fetches the image itself, so an address has to be public http(s); a link that cannot be read is refused before any search is paid for. An image and a keyword together search the image. Costs the same as a keyword search: one call per page of results.",
-      "editor": "fileupload"
+      "description": "Not available yet: the current data source accepts the request and then refuses it (\"the application 'Storage' is not available\"), so this is kept out of the form until a data source serves it. The code path is finished and tested; see VALIDATION.md.",
+      "editor": "hidden"
     },
     "detailLevel": {
       "title": "Detail level",

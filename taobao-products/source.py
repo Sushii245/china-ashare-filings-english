@@ -34,7 +34,6 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Iterable, Protocol
-from xml.sax.saxutils import escape as xml_escape
 
 import requests
 
@@ -151,13 +150,21 @@ class SourceConfig:
     search_path: str = "/taobao/item_search"
     item_id_param: str = "num_iid"
     keyword_param: str = "q"
-    #: Search by reference image, where the provider serves one. OTAPI takes
-    #: its search conditions as an XML document in a single parameter, so an
-    #: image search is that document carrying an ImageUrl element rather than
-    #: a flat parameter; a provider with a flat one sets ``image_param``.
+    #: Search by reference image, where the provider serves one: the query
+    #: parameter the image URL goes in. OTAPI's own documentation shows the
+    #: image inside its ``xmlParameters`` document, but the RapidAPI front-end
+    #: this Actor talks to takes flat parameters and refuses that document
+    #: ("Search parameters must have at least one of these values: CategoryId,
+    #: VendorName, VendorId, ItemTitle, BrandId, Configurators" — a real
+    #: response, 2026-10-25), so the flat parameter is the proven form and the
+    #: only one here.
     image_param: str | None = None
-    xml_params_param: str | None = None
-    xml_image_field: str = "ImageUrl"
+    #: An image search is a different kind of work from a keyword one: the
+    #: provider fetches the picture and runs a visual match, where a keyword is
+    #: a lookup. At the ordinary timeout it never finishes, so it gets its own,
+    #: and its own retry count, because each attempt is a billed minute.
+    image_timeout: float | None = None
+    image_max_retries: int = 1
     page_param: str = "page"
     extra_params: dict[str, str] = dataclasses.field(default_factory=dict)
     #: Minimum seconds between requests, enforced across every worker. This
@@ -239,7 +246,7 @@ class SourceConfig:
         Read before a run starts, so an image search against a provider that
         cannot do one fails up front instead of spending a call on it.
         """
-        return bool(self.image_param or self.xml_params_param)
+        return bool(self.image_param)
 
     @property
     def known_page_size(self) -> int | None:
@@ -439,27 +446,14 @@ def image_unreachable(
 def image_search_params(config: SourceConfig, image_url: str) -> dict[str, Any]:
     """The request parameters that make a search a search-by-image.
 
-    OTAPI takes its search conditions as one XML document, so the image goes
-    inside it. The URL is escaped into the element: an unescaped ``&`` — which
-    an image URL carrying a query string has — would make the document invalid
-    and the search something other than what was asked for.
-
-    The image is the only condition sent. A provider front-end that dropped an
-    unknown parameter would then be searching with no condition at all, which
-    it refuses outright; pairing the image with a keyword would instead turn a
-    dropped image into a plausible page of billable, unrelated hits.
+    The image is the only condition sent. Pairing it with the keyword would
+    turn a provider that ignored the image parameter into a page of plausible,
+    billable, unrelated hits; alone, an ignored image leaves no condition at
+    all, which this provider refuses outright and says so.
     """
     url = validate_image_url(image_url)
     if config.image_param:
         return {config.image_param: url}
-    if config.xml_params_param:
-        field = config.xml_image_field
-        return {
-            config.xml_params_param: (
-                f"<SearchItemsParameters><{field}>{xml_escape(url)}"
-                f"</{field}></SearchItemsParameters>"
-            )
-        }
     raise SourceError("this data source does not serve search by image")
 
 
@@ -640,7 +634,14 @@ class UpstreamSource:
         params.update({k: v for k, v in extra.items() if v is not None})
         return params
 
-    def _get(self, path: str, params: dict[str, Any]) -> Any:
+    def _get(
+        self,
+        path: str,
+        params: dict[str, Any],
+        *,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+    ) -> Any:
         """GET with retries for what can recover, and none for what cannot.
 
         Rate limiting and server errors are retried with backoff. A rejected
@@ -649,14 +650,14 @@ class UpstreamSource:
         only multiplies the wait. The provider's own message is kept.
         """
         url = self.config.base_url.rstrip("/") + path
+        wait_for = timeout if timeout is not None else self.config.timeout
+        tries = max_retries if max_retries is not None else self.config.max_retries
         last_error: Exception | None = None
         body: str | None = None
-        for attempt in range(self.config.max_retries + 1):
+        for attempt in range(tries + 1):
             self._throttle()
             try:
-                response = self.session.get(
-                    url, params=params, timeout=self.config.timeout
-                )
+                response = self.session.get(url, params=params, timeout=wait_for)
             except requests.RequestException as exc:
                 last_error = exc
             else:
@@ -672,7 +673,7 @@ class UpstreamSource:
                 else:
                     body = response.text
                     break
-            if attempt == self.config.max_retries:
+            if attempt == tries:
                 break
             backoff = self.config.backoff_base * ((2**attempt) + random.uniform(0, 1.0))
             LOG.warning(
@@ -681,7 +682,7 @@ class UpstreamSource:
                 last_error,
                 backoff,
                 attempt + 1,
-                self.config.max_retries,
+                tries,
             )
             time.sleep(backoff)
         if body is None:
@@ -825,7 +826,14 @@ class UpstreamSource:
             else {self.config.keyword_param: keyword}
         )
         params = self._params(**{**query, **self._paging_params(page)})
-        return self._get(self.config.search_path, params)
+        if image_url is None:
+            return self._get(self.config.search_path, params)
+        return self._get(
+            self.config.search_path,
+            params,
+            timeout=self.config.image_timeout,
+            max_retries=self.config.image_max_retries,
+        )
 
     def search_raw(
         self, keyword: str = "", *, page: int = 1, image_url: str | None = None
@@ -835,10 +843,18 @@ class UpstreamSource:
         The search response already carries a title, a price and an image per
         hit. Listing mode sells those directly: one billed call yields a whole
         page of records, where fetching each listing in full is one call each.
+
+        A body carrying the provider's own error is raised here rather than
+        read as a page with no hits. Details have always been checked this way;
+        search was not, so a refused search looked exactly like a search that
+        found nothing — a run that succeeds, returns nothing, and never says
+        the search did not happen.
         """
-        return _hits_from_search_payload(
-            self.search_response(keyword, page=page, image_url=image_url), self.config
-        )
+        payload = self.search_response(keyword, page=page, image_url=image_url)
+        error = self.config.in_body_error(payload)
+        if error:
+            raise SourceError(f"{self.config.search_path} refused the search: {error}")
+        return _hits_from_search_payload(payload, self.config)
 
 
 def _hits_from_search_payload(payload: Any, config: SourceConfig) -> list[dict[str, Any]]:
@@ -904,13 +920,20 @@ def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
         search_path="/BatchSearchItemsFrame",
         item_id_param="itemId",
         keyword_param="ItemTitle",
-        # Search by picture goes through the same endpoint, with the image in
-        # OTAPI's xmlParameters document — the form their own BatchSearchItemsFrame
-        # example uses (docs.otapi.net, read 2026-10-25); there is no flat
-        # ImageUrl parameter documented, and guessing one would spend a call to
-        # find out.
-        xml_params_param="xmlParameters",
-        xml_image_field="ImageUrl",
+        # Search by picture goes through the same endpoint under a flat
+        # ImageUrl parameter, as this host's own playground documents and a
+        # real run confirms (2026-10-25). OTAPI's generic documentation puts
+        # the image inside an xmlParameters document instead; this front-end
+        # builds that document itself and refuses a hand-written one.
+        image_param="ImageUrl",
+        # A real image search against this host does not answer inside the
+        # 30 s that a keyword search needs (which takes ~2.5 s): the provider
+        # has to fetch the picture and run a visual match. Timed out at 30 s,
+        # 2026-10-25, so it is given minutes — and one retry rather than
+        # three, since every attempt is billed and a slow search that timed
+        # out once will likely time out again.
+        image_timeout=180.0,
+        image_max_retries=1,
         offset_param="framePosition",
         page_size_param="frameSize",
         page_size=page_size,
