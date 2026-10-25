@@ -1,0 +1,101 @@
+{
+  "actorSpecification": 1,
+  "views": {
+    "overview": {
+      "title": "Products",
+      "transformation": {
+        "fields": [
+          "itemId",
+          "status",
+          "titleCn",
+          "titleEn",
+          "price",
+          "discountPct",
+          "sales",
+          "minOrderQuantity",
+          "shopNameCn",
+          "skuCount",
+          "stock",
+          "url"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "itemId": {
+            "label": "Item ID"
+          },
+          "status": {
+            "label": "Status"
+          },
+          "titleCn": {
+            "label": "Title (CN)"
+          },
+          "price": {
+            "label": "Price"
+          },
+          "sales": {
+            "label": "Sales"
+          },
+          "shopNameCn": {
+            "label": "Supplier"
+          },
+          "stock": {
+            "label": "Stock"
+          },
+          "url": {
+            "label": "Listing"
+          },
+          "discountPct": {
+            "label": "Discount %"
+          },
+          "skuCount": {
+            "label": "Variants"
+          },
+          "titleEn": {
+            "label": "Title (EN)"
+          },
+          "minOrderQuantity": {
+            "label": "MOQ"
+          }
+        }
+      }
+    },
+    "wholesale": {
+      "title": "Wholesale quote",
+      "transformation": {
+        "fields": [
+          "itemId",
+          "titleCn",
+          "minOrderQuantity",
+          "quote",
+          "priceTiers",
+          "shopNameCn"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "itemId": {
+            "label": "Item ID"
+          },
+          "titleCn": {
+            "label": "Title (CN)"
+          },
+          "minOrderQuantity": {
+            "label": "MOQ"
+          },
+          "quote": {
+            "label": "Quote at your quantity"
+          },
+          "priceTiers": {
+            "label": "Ladder"
+          },
+          "shopNameCn": {
+            "label": "Supplier"
+          }
+        }
+      }
+    }
+  }
+}

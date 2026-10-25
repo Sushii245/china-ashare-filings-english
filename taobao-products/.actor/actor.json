@@ -1,0 +1,21 @@
+{
+  "actorSpecification": 1,
+  "name": "1688-wholesale-products",
+  "title": "1688 Scraper — Wholesale Prices, MOQ & Order Quotes",
+  "description": "1688 product data through a commercial API, so no captchas or stalled runs. Search by keyword, or by offer id. Wholesale price ladders, minimum order (MOQ) with a filter, a quote for the quantity you intend to buy, 30-day sales, supplier scores and variants. Pay only for records returned.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "dockerfile": "../Dockerfile",
+  "changelog": "../CHANGELOG.md",
+  "input": "./input_schema.json",
+  "output": "./output_schema.json",
+  "storages": {
+    "dataset": "./dataset_schema.json"
+  },
+  "defaultMemoryMbytes": 512,
+  "maxMemoryMbytes": 2048,
+  "environmentVariables": {
+    "SOURCE_PROVIDER": "otapi-1688",
+    "SOURCE_API_KEY": "@otapi-1688-rapidapi-key"
+  }
+}
