@@ -27,7 +27,7 @@
     "imageUrl": {
       "title": "Search by image",
       "type": "string",
-      "description": "Not available yet: the current data source accepts the request and then refuses it (\"the application 'Storage' is not available\"), so this is kept out of the form until a data source serves it. The code path is finished and tested; see VALIDATION.md.",
+      "description": "Not offered yet. The code path is finished and tested, but no live call has proved a real visual match: the data source has been refusing every endpoint, keyword searches and detail fetches included. Kept out of the form until one call settles it; see VALIDATION.md.",
       "editor": "hidden"
     },
     "detailLevel": {

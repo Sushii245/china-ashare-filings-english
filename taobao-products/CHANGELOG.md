@@ -10,30 +10,25 @@ a real response first (VALIDATION.md).
   so a refused search looked exactly like a search that found nothing — a run
   that succeeded, returned nothing, and never said the search had not
   happened. Found by the first live image search, which did precisely that.
-- Search by picture is written and tested but **not offered**: this data
-  source accepts the request and then refuses it with "the application
-  'Storage' is not available", its own file-storage service, which its image
-  search needs. Its paid tiers differ only in quota, so the input stays out of
-  the form until a data source serves it. What the code does hold, proven
-  against real responses: the image goes out under the flat `ImageUrl`
-  parameter the provider's playground documents, not inside OTAPI's
-  `xmlParameters` document (refused: "Search parameters must have at least one
-  of these values: CategoryId, VendorName, VendorId, ItemTitle, BrandId,
-  Configurators"); an image search is given minutes rather than the 30 s a
-  keyword search needs, and one retry rather than three, since each attempt is
-  billed; the picture is the only condition sent, so an ignored image cannot
-  come back as a page of billable keyword hits; and an unreadable image
-  address is refused before any billed call, read once on the image's own host.
-- Search by picture. `imageUrl` takes the web address of a product photo and
-  the data source matches it visually, instead of matching a keyword; both
-  detail levels, the quote, the minimum-order filter and the per-record price
-  are the same either way, at one call per page of results. The picture is the
-  only condition sent: pairing it with a keyword would turn a data source that
-  ignored the image into a page of plausible, billable, unrelated hits. An
-  image URL the data source could not fetch — a local path, a `data:` URI, a
-  bare host — and a data source that serves words only are both refused before
-  a call is spent, and an image given with a keyword searches the image and
-  says so in the log.
+- Search by picture, written and tested but **not offered yet**. `imageUrl`
+  takes the address of a product photo — uploaded in the form or pasted — and
+  the data source matches it visually instead of matching words; both detail
+  levels, the quote, the minimum-order filter and the per-record price are the
+  same either way, at one call per page. The input is kept out of the form
+  until one live call proves a real match, which this data source cannot
+  answer while it is refusing every endpoint (VALIDATION.md). What is already
+  proven against it: the image goes out under the flat `ImageUrl` parameter
+  the provider's playground documents, not inside OTAPI's `xmlParameters`
+  document, which is refused ("Search parameters must have at least one of
+  these values: CategoryId, VendorName, VendorId, ItemTitle, BrandId,
+  Configurators"); an image search gets minutes rather than the 30 s a keyword
+  search needs, and one retry rather than three, since each attempt is billed;
+  the picture is the only condition sent, so an image the provider ignored
+  cannot come back as a page of billable keyword hits; an address the data
+  source could not read — a local path, a `data:` URI, a bare host, an upload
+  in a private store — is refused before any billed call, read once on the
+  image's own host; and an image given together with a keyword searches the
+  image and says so.
 - `maxMinOrderQuantity` keeps only listings whose minimum order is at most
   the number given. With a keyword, search hits whose ladder already starts
   above it are dropped before any detail call; ids given directly are checked

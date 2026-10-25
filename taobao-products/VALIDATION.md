@@ -238,53 +238,64 @@ maps exactly as live data would be. Without `SOURCE_PROVIDER` the replay uses
 the default map and proves nothing. Check the records, then check
 that the bogus id came back with a status and **was not billed**.
 
-## Image search — proven impossible on this data source (7 calls)
+## 2026-10-25 — the data source is refusing everything
 
-Four platform runs on 2026-10-25, build tag `image-test` so nothing buyers
-run was touched. Each step's real response, in order:
+Found while smoke-testing the build before releasing it. Right now, every
+endpoint answers the same way, slowly:
 
-1. **OTAPI's documented `xmlParameters` document** (`<SearchItemsParameters>`
-   `<ImageUrl>…</ImageUrl></SearchItemsParameters>`) — the form its own
-   `BatchSearchItemsFrame` example uses. Refused:
+    NotAvailable: The application 'Storage' is not available.
 
-       ContractViolation: Search parameters must have at least one of these
-       values: CategoryId, VendorName, VendorId, ItemTitle, BrandId, Configurators
+- image search (flat `ImageUrl`): 65 s, refused;
+- keyword search (`ItemTitle=T恤 批发`), the path that has worked since
+  2026-10-19 and that the daily automated test uses: 108 s, refused;
+- detail fetch (`BatchGetItemFullInfo`, id 669724481680): 54 s, refused,
+  reported as `upstream_error` and not billed.
 
-   So the document does reach OTAPI, and `ImageUrl` is not a condition its
-   validator counts. The first of these runs *looked like a success*: zero
-   records, exit 0, 0.3 s — because a search response was never checked for an
-   error in its body. That is fixed (`search_raw` raises), and it is the one
-   finding here that changes the keyword path too.
-2. **The flat `ImageUrl` parameter**, as this host's own RapidAPI playground
-   documents it beside `ItemTitle`, `OrderBy`, `MinPrice`, `MaxPrice` and
-   `MinVolume`. Accepted — no contract violation — but it timed out at 30 s,
-   four attempts, about two billed minutes. A keyword search answers in ~2.5 s;
-   fetching a picture and running a visual match is different work.
-3. **Flat parameter, 180 s, one retry.** An answer after 65 s:
+Normal latency on this host is ~2.5 s, so it is degraded, not merely erroring.
+The credentials are fine: a rejected key is a 401/403 and raises
+`AuthenticationFailed`, which none of these did. RapidAPI's discussion board
+for the API has nothing recent (its newest thread is three years old and
+unanswered, which says something about support there).
 
-       NotAvailable: The application 'Storage' is not available.
+**What this does to the published Actor.** Build 0.1.4, what buyers run today,
+reads an error in a search body as a page with no hits — so a listing-mode or
+keyword run right now *succeeds*, returns nothing, and says nothing was wrong.
+Nothing is billed, but nothing is explained either. The fix in this branch
+raises it instead, with the provider's own message. Detail runs were never
+affected: that path has always checked the body.
 
-   OTAPI's file-storage service — the part its image search needs to hold the
-   picture. Nothing on our side sends it anywhere else to fix.
+## Image search — form proven, verdict suspended
 
-RapidAPI's four tiers for this API (Basic, Pro $25, Ultra $150, Mega $350)
-differ only in requests a day and bandwidth, with no feature list, so
-upgrading is not expected to turn Storage on.
+What the four runs of 2026-10-25 do establish:
 
-**State:** the Actor's side is finished and tested — flat `ImageUrl`, its own
-timeout and retry budget, image-only condition, a free reachability check on
-the picture before any billed call, and a refused search that is raised rather
-than read as empty. The input is `hidden` and the Store text promises nothing.
+- **The parameter form.** OTAPI's documented `xmlParameters` document reaches
+  OTAPI and is refused — `ContractViolation: Search parameters must have at
+  least one of these values: CategoryId, VendorName, VendorId, ItemTitle,
+  BrandId, Configurators` — while the flat `ImageUrl` parameter this host's
+  own playground documents is accepted, no contract violation. That difference
+  is a real answer and it is what the preset now uses. The playground lists
+  `OrderBy`, `MinPrice`, `MaxPrice` and `MinVolume` beside it: unused levers.
+- **A search response carrying an error used to read as an empty page.** The
+  first image search returned a successful run with no records in 0.3 s; that
+  is now raised. The one finding here that improves the keyword path too.
 
-**To finish it, one of:**
+What is **not** established, and what I wrongly concluded before the smoke
+test: that image search needs an OTAPI "Storage" application this instance
+lacks. The same `NotAvailable: Storage` answer comes back for keyword searches
+and detail fetches, so it is the outage above, not an image-specific gap. The
+30 s timeout being too short is contaminated the same way — a keyword search
+took 108 s during the outage. The longer image budget stays anyway: it costs
+nothing when the provider is healthy, and a visual match is genuinely heavier
+than a lookup.
 
-- ask the provider (RapidAPI support / OTAPI) to enable the Storage
-  application for this instance, and re-run step 3 — one call to confirm;
-- add a second data-source preset for a provider whose 1688 image search is
-  live (tmapi.top and dajisaas both document an `img_url`-style endpoint).
-  `SourceConfig.image_param` is exactly the hook, so this is a preset plus a
-  capture, not a rewrite;
-- leave it shelved. Nothing is billed for it either way.
+**To settle it, once the provider is healthy** (a keyword run returning records
+is the signal), one call:
+
+    apify call -b image-test -i '{"imageUrl":"https://cbu01.alicdn.com/img/ibank/O1CN01ha5KYW1knTcju4X9C_!!2813694728-0-cib.jpg","detailLevel":"listing","maxProducts":5,"platform":"1688"}'
+
+That image is the main picture of offer 672715568844, so finding that offer in
+the results proves the match is real rather than merely accepted. Until then
+the input stays `hidden` and the Store text promises nothing.
 
 ## Before publishing
 
