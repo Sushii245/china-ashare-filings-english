@@ -20,12 +20,12 @@
     "keyword": {
       "title": "Search keyword",
       "type": "string",
-      "description": "Search 1688 instead of naming ids, in Chinese or English, e.g. T恤 批发 or linear guide slider. Required for listing level, unless you search by image instead.",
+      "description": "Search 1688 instead of naming ids, in Chinese or English, e.g. T恤 批发 or linear guide slider. Required for listing level.",
       "editor": "textfield",
       "prefill": "T恤 批发"
     },
     "imageUrl": {
-      "title": "Search by image",
+      "title": "Search by image (not offered yet)",
       "type": "string",
       "description": "Not offered yet. The code path is finished and tested, but no live call has proved a real visual match: the data source has been refusing every endpoint, keyword searches and detail fetches included. Kept out of the form until one call settles it; see VALIDATION.md.",
       "editor": "hidden"
@@ -33,7 +33,7 @@
     "detailLevel": {
       "title": "Detail level",
       "type": "string",
-      "description": "Full detail fetches each listing: the wholesale ladder and minimum order, variants, attributes and seller scores. Listing level sells the search results themselves — title, price, sales, supplier, image, and the ladder where the search result includes it (about half the time) — which is enough to shortlist on and costs a fraction, because one call returns a whole page. Listing level needs a search keyword or an image.",
+      "description": "Full detail fetches each listing: the wholesale ladder and minimum order, variants, attributes and seller scores. Listing level sells the search results themselves — title, price, sales, supplier, image, and the ladder where the search result includes it (about half the time) — which is enough to shortlist on and costs a fraction, because one call returns a whole page. Listing level needs a search keyword.",
       "editor": "select",
       "default": "full",
       "enum": [
@@ -70,7 +70,7 @@
     "maxMinOrderQuantity": {
       "title": "Only sellers whose minimum order is at most",
       "type": "integer",
-      "description": "Keep only listings whose minimum order (起订量) is this many pieces or fewer — e.g. 2 for samples or a small first order. When searching by keyword or image, search results whose price ladder already starts above it are dropped before any detail is fetched, so they cost you nothing. Listings left out are never billed and do not count towards Max products. A listing that states no minimum is kept. Leave empty to keep every listing.",
+      "description": "Keep only listings whose minimum order (起订量) is this many pieces or fewer — e.g. 2 for samples or a small first order. With a keyword, search results whose price ladder already starts above it are dropped before any detail is fetched, so they cost you nothing. Listings left out are never billed and do not count towards Max products. A listing that states no minimum is kept. Leave empty to keep every listing.",
       "editor": "number",
       "minimum": 1,
       "maximum": 1000000
