@@ -252,6 +252,9 @@ endpoint answers the same way, slowly:
   reported as `upstream_error` and not billed.
 
 Normal latency on this host is ~2.5 s, so it is degraded, not merely erroring.
+By 14:58 local it had stopped answering at all: a keyword probe timed out,
+four attempts, which is what capped retries on a timeout to one — a hung
+provider was costing four billed attempts per run.
 The credentials are fine: a rejected key is a 401/403 and raises
 `AuthenticationFailed`, which none of these did. RapidAPI's discussion board
 for the API has nothing recent (its newest thread is three years old and

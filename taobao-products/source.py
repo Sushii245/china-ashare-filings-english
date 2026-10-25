@@ -165,6 +165,12 @@ class SourceConfig:
     #: and its own retry count, because each attempt is a billed minute.
     image_timeout: float | None = None
     image_max_retries: int = 1
+    #: How many times a request that *timed out* is retried, however many
+    #: retries the rest of the budget allows. A read timeout means the request
+    #: reached the provider — so it is billed — and that they are hung rather
+    #: than erroring; three more attempts at a minute each is three more
+    #: charges for the same answer.
+    timeout_max_retries: int = 1
     page_param: str = "page"
     extra_params: dict[str, str] = dataclasses.field(default_factory=dict)
     #: Minimum seconds between requests, enforced across every worker. This
@@ -674,6 +680,19 @@ class UpstreamSource:
                     body = response.text
                     break
             if attempt == tries:
+                break
+            if (
+                isinstance(last_error, requests.Timeout)
+                and attempt >= self.config.timeout_max_retries
+            ):
+                LOG.warning(
+                    "GET %s timed out %d time(s); not retrying further, because "
+                    "a request that timed out still reached the provider and is "
+                    "billed (%s)",
+                    path,
+                    attempt + 1,
+                    last_error,
+                )
                 break
             backoff = self.config.backoff_base * ((2**attempt) + random.uniform(0, 1.0))
             LOG.warning(

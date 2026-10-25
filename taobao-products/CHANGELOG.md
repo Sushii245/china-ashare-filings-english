@@ -5,6 +5,12 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
+- A request that timed out is retried once, not three times. A read timeout
+  means the request reached the data source — so it is billed — and that they
+  are hung rather than erroring, which the next attempt will find too. While
+  the provider hung on 2026-10-25, every run spent four billed attempts of
+  30 s each to arrive at the same failure. Errors that cost nothing, like a
+  reset connection, keep the full retry budget.
 - A search the data source refused is raised, not read as a page with no
   hits. Details were always checked for an error in the body; search was not,
   so a refused search looked exactly like a search that found nothing — a run

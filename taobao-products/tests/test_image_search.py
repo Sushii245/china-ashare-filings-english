@@ -394,3 +394,54 @@ def test_a_timed_out_image_search_is_retried_once_not_three_times():
     with pytest.raises(source_mod.SourceError):
         client.search_raw(image_url=IMAGE)
     assert client.session.calls == 2
+
+
+# ------------------------------------------- a hung provider cannot bill four times
+
+
+def test_a_timed_out_keyword_search_is_retried_once_not_three_times():
+    # 2026-10-25: the provider hung, and every run spent four billed attempts
+    # — 30s each — on the same answer. A timeout means the request reached
+    # them, so it is charged; a hung provider must not cost four charges.
+    import requests
+
+    class _Hung:
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url, params=None, timeout=None):
+            self.calls += 1
+            raise requests.ReadTimeout("read timed out")
+
+    client = _otapi_client()
+    client.config.backoff_base = 0.0
+    client.config.max_retries = 3
+    client.session = _Hung()  # type: ignore[assignment]
+    with pytest.raises(source_mod.SourceError):
+        client.search_raw("T恤 批发")
+    assert client.session.calls == 2
+
+
+def test_an_error_that_is_not_a_timeout_keeps_the_full_retry_budget():
+    # A reset connection costs nothing and may well succeed next time.
+    import requests
+
+    class _Flaky:
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url, params=None, timeout=None):
+            self.calls += 1
+            raise requests.ConnectionError("reset")
+
+    client = _otapi_client()
+    client.config.backoff_base = 0.0
+    client.config.max_retries = 3
+    client.session = _Flaky()  # type: ignore[assignment]
+    with pytest.raises(source_mod.SourceError):
+        client.search_raw("T恤 批发")
+    assert client.session.calls == 4
