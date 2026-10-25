@@ -5,6 +5,12 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
+- A run stops after one batch when the data source itself is down, instead of
+  after ten failures. Three listings in a row failing with the *same* upstream
+  sentence is the source being unavailable, not three bad ids — so the run
+  says that, and stops paying for calls that cannot succeed. Ids that fail
+  with their own separate messages still take the slower ratio breaker, so a
+  few stale ids among good ones do not cut a run short.
 - The free check on a reference image no longer cancels searches that would
   have worked. Image CDNs refuse a bare script client, so our own 403 — or a
   challenge page served as HTML — is doubt, not proof: it is logged and the

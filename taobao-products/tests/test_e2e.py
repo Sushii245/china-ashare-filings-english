@@ -373,6 +373,37 @@ def test_a_free_plan_listing_run_costs_one_call(tmp_path):
     assert "free Apify plan, limited to 20" in run.log
 
 
+def test_a_data_source_that_is_down_stops_the_run_after_one_batch(tmp_path):
+    # 2026-10-25: the provider answered "NotAvailable: The application
+    # 'Storage' is not available" to everything. Twenty good ids would have
+    # spent ten failed calls before the ratio breaker noticed; the same
+    # sentence three times over is the source, not the ids, so one batch of
+    # five is where it stops.
+    ids = [str(600000000000 + n) for n in range(20)]
+    run = run_actor(
+        tmp_path,
+        {"itemIds": ids, "platform": "1688", "maxProducts": 20, "concurrency": 5},
+        FETCH_SPY_SOURCE_DOWN="NotAvailable: The application 'Storage' is not available.",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert len(run.fetched) == 5, f"spent {len(run.fetched)} calls on a dead source"
+    assert "this is the data source rather than the ids" in run.log
+    assert {r["status"] for r in run.records} == {"upstream_error"}
+
+
+def test_bad_ids_still_take_the_slower_ratio_breaker(tmp_path):
+    # Each missing id fails with its own message, so the same-error rule must
+    # not fire on them: a buyer with a few stale ids among good ones should
+    # still get the good ones.
+    run = run_actor(
+        tmp_path,
+        {"itemIds": [*BOGUS[:4], *OK_IDS], "platform": "1688", "maxProducts": 20},
+    )
+    assert run.proc.returncode == 0, run.log
+    assert "this is the data source rather than the ids" not in run.log
+    assert [r["itemId"] for r in run.records if r["status"] == "ok"] == OK_IDS
+
+
 def test_a_run_of_made_up_ids_is_stopped_by_the_breaker(tmp_path):
     # 25 ids that exist nowhere, then three good ones. Unbilled, each still
     # costs a data-source call; the breaker stops after the second batch of

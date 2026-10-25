@@ -302,8 +302,10 @@ the input stays `hidden` and the Store text promises nothing.
 
 ## Before publishing
 
-- [ ] Re-measure throughput against the real ~2.5 s latency and correct the
-      README. Five workers at that latency is nowhere near 284 a minute.
+- [x] **Re-measure throughput against the real latency.** Done 2026-10-25
+      from the platform runs: a call costs 1-2 s healthy, so five workers is
+      about 120 listings a minute, not 284. DESIGN.md now says so, and the
+      README never carried a figure — nothing to correct there.
 - [ ] **Check the daily test's cost.** The prefill is now a keyword
       (`T恤 批发`), 3 products and a quantity of 100: one search plus three
       listings, four calls. If Apify's daily automated run uses the prefilled

@@ -86,6 +86,14 @@ ENV_USER_IS_PAYING = "APIFY_USER_IS_PAYING"
 BREAKER_MIN_UNBILLED = 10
 BREAKER_CONSECUTIVE = 20
 
+#: How many listings in a row may fail with the *same* data-source error
+#: before the run stops. A wrong id fails on its own terms; the identical
+#: upstream sentence three times over is the data source being down, not the
+#: ids being wrong, and every id after that is a call paid for a certain
+#: failure. Three is one batch at the default concurrency, so an outage costs
+#: one batch instead of the ten failures the ratio breaker waits for.
+BREAKER_SAME_ERROR = 3
+
 #: Seconds between requests when the input leaves it unset. Matches the input
 #: schema default; kept here too for runs started through the API without it.
 DEFAULT_MIN_INTERVAL = 0.2
@@ -224,8 +232,38 @@ def _plan_limit(
     return min(limit, cap), limit > cap
 
 
-def _breaker_reason(attempted: int, unbilled: int, consecutive: int) -> str | None:
-    """Why the run should stop fetching, or None to carry on."""
+def _error_signature(product: normalize_mod.Product) -> str | None:
+    """What a failure was, as a string two failures can be compared on.
+
+    None for a listing that came back. Otherwise the status and the upstream
+    sentence: two listings failing with the same one failed for the same
+    reason, which is how a data source being down is told apart from a handful
+    of bad ids.
+    """
+    if product.status == "ok":
+        return None
+    detail = (product.status_detail or "").strip()
+    return f"{product.status}: {detail}" if detail else product.status
+
+
+def _breaker_reason(
+    attempted: int,
+    unbilled: int,
+    consecutive: int,
+    same_error: int = 0,
+    same_error_detail: str | None = None,
+) -> str | None:
+    """Why the run should stop fetching, or None to carry on.
+
+    The same-error check comes first because it is the most specific and the
+    cheapest to hit: it names the data source instead of leaving the buyer to
+    wonder about their ids, and it stops after one batch rather than ten.
+    """
+    if same_error >= BREAKER_SAME_ERROR and same_error_detail:
+        return (
+            f"{same_error} listings in a row failed the same way, so this is "
+            f"the data source rather than the ids ({same_error_detail})"
+        )
     if consecutive >= BREAKER_CONSECUTIVE:
         return f"{consecutive} listings in a row came back unavailable"
     if unbilled >= BREAKER_MIN_UNBILLED and unbilled * 2 > attempted:
@@ -900,6 +938,8 @@ async def main() -> None:
         returned = skipped = filtered = 0
         hit_charge_limit = False
         attempted = consecutive_unbilled = 0
+        same_error = 0
+        same_error_signature: str | None = None
         tripped: str | None = None
         charging = Actor.get_charging_manager()
         pending = list(item_ids)
@@ -950,6 +990,12 @@ async def main() -> None:
                 done += 1
                 attempted += 1
                 consecutive_unbilled = 0 if product.status == "ok" else consecutive_unbilled + 1
+                signature = _error_signature(product)
+                if signature is not None and signature == same_error_signature:
+                    same_error += 1
+                else:
+                    same_error_signature = signature
+                    same_error = 1 if signature is not None else 0
                 Actor.log.info(
                     "[%d/%d] %s %s", done, len(item_ids), product.item_id, product.status
                 )
@@ -990,7 +1036,13 @@ async def main() -> None:
 
             # Checked between batches: a batch is the unit of fetching, so this
             # is the earliest point at which stopping saves calls.
-            tripped = _breaker_reason(attempted, skipped, consecutive_unbilled)
+            tripped = _breaker_reason(
+                attempted,
+                skipped,
+                consecutive_unbilled,
+                same_error,
+                same_error_signature,
+            )
             if tripped and pending:
                 Actor.log.warning(
                     "Stopping early: %s. Not fetching the remaining %d — check "

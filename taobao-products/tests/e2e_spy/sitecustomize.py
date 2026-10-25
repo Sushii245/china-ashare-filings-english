@@ -52,6 +52,18 @@ if _LOG:
         source.FixtureSource.fetch_product = reject_fetch
         source.FixtureSource.search_raw = reject_search
 
+    # Simulates the data source itself being down: every listing fails with the
+    # identical upstream sentence, the way a provider outage looks. Set
+    # FETCH_SPY_SOURCE_DOWN to the message.
+    _source_down = os.environ.get("FETCH_SPY_SOURCE_DOWN")
+    if _source_down:
+
+        def down_fetch(self, item_id):
+            _record("fetch", item_id)
+            raise source.SourceError(_source_down)
+
+        source.FixtureSource.fetch_product = down_fetch
+
     # Simulates a search endpoint that is down: retries exhausted. Pages listed
     # in FETCH_SPY_SEARCH_DOWN fail ("1", or "2" to fail only later pages).
     _down = os.environ.get("FETCH_SPY_SEARCH_DOWN")

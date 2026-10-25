@@ -259,9 +259,18 @@ make one:
 
 ## Throughput
 
-*The figures below were measured against a simulated 300 ms round-trip.
-RapidAPI lists this data source's latency at ~2.5 s, so they need re-measuring
-against the real thing before any of them appears on the Store page.*
+*What the platform runs actually show (2026-10-20, 2026-10-25): three listings
+at full detail with five workers finish in 5-6 s of wall clock including the
+container starting, and one search page returning 20 records in 7 s. So a call
+costs on the order of 1-2 s, not the 300 ms the simulated figures below assume,
+and RapidAPI's own ~2.5 s listing is the right order of magnitude. At 2.5 s and
+five workers the ceiling is about 120 listings a minute; at ten workers and
+0.1 s spacing, about 240. Those two are arithmetic from the latency, not
+measurements. None of these numbers is on the Store page, and the simulated
+ones below must not go there.*
+
+*Degraded, the same calls took 54-108 s (2026-10-25), which is why an image
+search carries its own timeout and why a timed-out request is retried once.*
 
 
 The A-share Actor spaces its requests a second apart because it reads CNINFO's
@@ -273,8 +282,9 @@ minute when a competitor advertises 250+.
 Listings are fetched five at a time by default, with the request spacing held
 globally rather than per worker — N workers each honouring the interval
 independently would be N times the intended rate, which is how a rate limit
-gets tripped. Measured against a 300 ms round-trip: ~61/min serial at the old
-1 s spacing, ~284/min at the defaults, ~525/min at ten workers and 0.1 s.
+gets tripped. Against a simulated 300 ms round-trip: ~61/min serial at the old 1 s spacing,
+~284/min at the defaults, ~525/min at ten workers and 0.1 s. Those measure the
+batching, not this data source; see the note above for what it really costs.
 
 Batching keeps the billing path intact: a batch is fetched in parallel, then
 its records are pushed and charged in sequence. Before each batch the Actor asks
