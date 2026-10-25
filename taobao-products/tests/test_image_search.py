@@ -147,10 +147,12 @@ class _ImageHost:
     def __init__(self, status=200, content_type="image/jpeg", error=None) -> None:
         self.status, self.content_type, self.error = status, content_type, error
         self.asked: list[str] = []
+        self.headers_sent: dict[str, str] = {}
         self.closed = 0
 
     def get(self, url, timeout=None, stream=None, headers=None):
         self.asked.append(url)
+        self.headers_sent = dict(headers or {})
         if self.error:
             raise self.error
         host = self
@@ -172,30 +174,64 @@ def test_a_readable_image_is_no_problem():
     assert host.closed == 1
 
 
-def test_an_upload_the_data_source_cannot_read_is_named_as_such():
-    # The case this exists for: a key-value store record that is not public.
+def test_a_refusal_is_doubt_not_proof_because_cdns_block_us():
+    # A Shopify or Cloudflare-fronted host answers a non-browser client with
+    # 403 while serving the picture to anyone else — the data source included.
+    # Cancelling the search on our own 403 would cancel searches that work.
     problem = source_mod.image_unreachable(
         "https://api.apify.com/v2/key-value-stores/x/records/photo.jpg",
         session=_ImageHost(status=403),
     )
-    assert problem is not None and "HTTP 403" in problem
+    assert problem is not None and "HTTP 403" in problem.message
+    assert problem.certain is False
 
 
-def test_an_address_serving_a_web_page_is_not_an_image():
+def test_the_probe_does_not_announce_itself_as_a_script():
+    host = _ImageHost()
+    source_mod.image_unreachable(IMAGE, session=host)
+    assert "python-requests" not in host.headers_sent.get("User-Agent", "")
+    assert host.headers_sent["User-Agent"].startswith("Mozilla/5.0")
+
+
+def test_an_address_serving_a_web_page_is_doubtful_too():
     problem = source_mod.image_unreachable(
         "https://detail.1688.com/offer/672715568844.html",
         session=_ImageHost(content_type="text/html; charset=utf-8"),
     )
-    assert problem is not None and "not an image" in problem
+    assert problem is not None and "not an image" in problem.message
+    assert problem.certain is False
 
 
-def test_a_host_that_cannot_be_reached_at_all_is_reported():
+def test_a_host_that_cannot_be_reached_at_all_is_certain():
+    # No client gets past a connection that cannot be made, so this one is
+    # worth stopping the run for.
     import requests
 
     problem = source_mod.image_unreachable(
         IMAGE, session=_ImageHost(error=requests.ConnectionError("no route"))
     )
-    assert problem is not None and "could not be fetched" in problem
+    assert problem is not None and "could not be fetched" in problem.message
+    assert problem.certain is True
+
+
+@pytest.mark.parametrize(
+    "inside",
+    [
+        "http://localhost/photo.jpg",
+        "http://127.0.0.1:8080/photo.jpg",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.0.0.5/photo.jpg",
+        "http://192.168.1.4/photo.jpg",
+        "http://[::1]/photo.jpg",
+        "http://metadata.internal/photo.jpg",
+    ],
+)
+def test_an_address_inside_the_run_is_refused_before_it_is_fetched(inside):
+    # The probe fetches whatever the input names, from inside the run, and
+    # reports the status: without this, the input is a way to ask the Actor
+    # which internal addresses answer.
+    with pytest.raises(source_mod.SourceError, match="inside the machine"):
+        source_mod.validate_image_url(inside)
 
 
 @pytest.mark.parametrize("content_type", ["", "application/octet-stream", "binary/image"])

@@ -5,6 +5,14 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
+- The free check on a reference image no longer cancels searches that would
+  have worked. Image CDNs refuse a bare script client, so our own 403 — or a
+  challenge page served as HTML — is doubt, not proof: it is logged and the
+  search goes ahead, while a connection that cannot be made at all still
+  stops the run. The probe also identifies itself like a browser, and an
+  address that points inside the machine running the Actor (loopback, a
+  private range, a cloud metadata address) is refused before it is fetched,
+  so the input cannot be used to ask the Actor what its own network answers.
 - A request that timed out is retried once, not three times. A read timeout
   means the request reached the data source — so it is billed — and that they
   are hung rather than erroring, which the next attempt will find too. While

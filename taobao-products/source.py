@@ -26,14 +26,16 @@ buyer sees which ids were refused; the run still succeeds.
 from __future__ import annotations
 
 import dataclasses
+import ipaddress
 import json
 import logging
 import random
 import re
 import threading
 import time
+import urllib.parse
 from pathlib import Path
-from typing import Any, Iterable, Protocol
+from typing import Any, Iterable, NamedTuple, Protocol
 
 import requests
 
@@ -395,6 +397,24 @@ def looks_blocked(text: str) -> str | None:
 _HTTP_URL = re.compile(r"^https?://", re.IGNORECASE)
 
 
+def _is_private_host(url: str) -> bool:
+    """Whether this address is one only the run's own network can reach.
+
+    The reference image is meant to be fetched by the data source, out on the
+    internet. Anything that resolves inside the container instead — loopback,
+    a private range, the cloud metadata address — is not a picture anyone
+    else could read, and this Actor should not be made to fetch it on request.
+    """
+    host = (urllib.parse.urlsplit(url).hostname or "").strip("[]").lower()
+    if not host or host == "localhost" or host.endswith((".localhost", ".local", ".internal")):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return not address.is_global
+
+
 def validate_image_url(image_url: str) -> str:
     """The reference image URL, trimmed, or a refusal saying what is wrong."""
     url = (image_url or "").strip()
@@ -404,44 +424,76 @@ def validate_image_url(image_url: str) -> str:
             f"{image_url!r} — upload the picture somewhere the data source can "
             "read it and pass that address"
         )
+    if _is_private_host(url):
+        raise SourceError(
+            f"{url!r} is not an address the data source could reach: it points "
+            "inside the machine running this Actor. Use a public image URL."
+        )
     return url
 
 
-#: Content types that prove the address is not a picture: an error page, a
-#: JSON refusal, a private-store login redirect. Anything else is let through,
-#: including a host that serves an image under a vague type.
+#: Content types that say the address is not a picture: an error page, a JSON
+#: refusal, a login redirect. Grounds for doubt, not for certainty — a host
+#: can serve a real image under a careless type.
 _NOT_AN_IMAGE = ("text/html", "text/plain", "application/json", "application/xml")
+
+#: Image CDNs — Shopify's, Cloudflare-fronted shops, several marketplaces —
+#: refuse a bare ``python-requests`` client outright. The probe says who it is
+#: while still looking like a browser, because the question being asked is
+#: whether the picture is there, not whether we are interesting.
+_IMAGE_PROBE_HEADERS = {
+    "Accept": "image/*,*/*",
+    "User-Agent": "Mozilla/5.0 (compatible; apify-1688-products/0.1)",
+}
+
+
+class ImageProblem(NamedTuple):
+    """Something wrong with the reference image, and how sure we are.
+
+    ``certain`` separates "nobody can fetch this" from "we could not, with our
+    client, from here". Only the first should stop a run: the data source
+    fetches the picture itself, from its own address, so refusing on our own
+    403 would cancel searches that would have worked.
+    """
+
+    certain: bool
+    message: str
 
 
 def image_unreachable(
     image_url: str, *, session: Any | None = None, timeout: float = 10.0
-) -> str | None:
-    """Why the data source will not be able to read this picture, if it won't.
+) -> ImageProblem | None:
+    """Why the data source may not be able to read this picture.
 
     Costs nothing billable — it reads the image's own host, not the provider —
     and it is the difference between "your upload is in a private store" and a
-    paid search that quietly matched nothing. Only what is certain counts as a
-    problem: the fetch failing outright, or a body that is plainly a web page
-    rather than an image. A 200 under an odd content type is let through,
-    because refusing a picture the provider could have read would be worse.
+    paid search that quietly matched nothing.
+
+    Certain, so worth stopping a run: the fetch failing outright, which no
+    client could get past. Doubtful, so worth only a warning: a refusal or a
+    web page, which may be this client being turned away rather than the
+    picture being absent.
     """
     getter = session or requests
     try:
         response = getter.get(
-            image_url,
-            timeout=timeout,
-            stream=True,
-            headers={"Accept": "image/*,*/*"},
+            image_url, timeout=timeout, stream=True, headers=_IMAGE_PROBE_HEADERS
         )
     except requests.RequestException as exc:
-        return f"the image could not be fetched ({exc})"
+        return ImageProblem(True, f"the image could not be fetched ({exc})")
     try:
         code = response.status_code
         if code >= 400:
-            return f"the image address returned HTTP {code}"
+            return ImageProblem(
+                False,
+                f"the image address answered HTTP {code} to this run; the data "
+                "source may still be able to read it",
+            )
         content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if content_type in _NOT_AN_IMAGE:
-            return f"the image address served {content_type}, not an image"
+            return ImageProblem(
+                False, f"the image address served {content_type}, not an image"
+            )
     finally:
         close = getattr(response, "close", None)
         if callable(close):

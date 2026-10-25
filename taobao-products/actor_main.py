@@ -761,15 +761,28 @@ async def main() -> None:
                 # Reading the image's own host costs nothing billable, and an
                 # upload sitting in a private store would otherwise look like
                 # a picture that simply matched nothing — after paying for the
-                # search. A fixture run makes no provider call, so it makes
-                # none here either.
-                problem = source_mod.image_unreachable(image_url)
-                if problem:
+                # search. In a thread, like every other blocking call here, so
+                # a host that accepts the connection and never answers cannot
+                # stall the Actor's event loop. A fixture run makes no provider
+                # call, so it makes none here either.
+                problem = await asyncio.to_thread(
+                    source_mod.image_unreachable, image_url
+                )
+                if problem and problem.certain:
                     raise source_mod.SourceError(
-                        f"the reference image cannot be read: {problem}. The data "
-                        "source fetches the picture itself, so it has to be a "
-                        "public address — check the link opens in a private "
+                        f"the reference image cannot be read: {problem.message}. "
+                        "The data source fetches the picture itself, so it has to "
+                        "be a public address — check the link opens in a private "
                         "browser window."
+                    )
+                if problem:
+                    # Not certain: the data source fetches the picture from its
+                    # own address, with its own client, and may well succeed
+                    # where this run was turned away. Saying so beats cancelling
+                    # a search that would have worked.
+                    Actor.log.warning(
+                        "The reference image looks doubtful: %s. Searching anyway.",
+                        problem.message,
                     )
         except (source_mod.SourceError, ValueError) as exc:
             await Actor.fail(status_message=str(exc))
