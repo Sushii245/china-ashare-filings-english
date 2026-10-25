@@ -140,6 +140,76 @@ def test_the_otapi_preset_serves_image_search():
     assert source_mod.otapi_1688_config("k").serves_image_search is True
 
 
+# ------------------------------------------------- is the picture readable at all
+
+
+class _ImageHost:
+    """Stands in for whatever is serving the reference image."""
+
+    def __init__(self, status=200, content_type="image/jpeg", error=None) -> None:
+        self.status, self.content_type, self.error = status, content_type, error
+        self.asked: list[str] = []
+        self.closed = 0
+
+    def get(self, url, timeout=None, stream=None, headers=None):
+        self.asked.append(url)
+        if self.error:
+            raise self.error
+        host = self
+
+        class R:
+            status_code = host.status
+            headers = {"Content-Type": host.content_type}
+
+            def close(inner):
+                host.closed += 1
+
+        return R()
+
+
+def test_a_readable_image_is_no_problem():
+    host = _ImageHost()
+    assert source_mod.image_unreachable(IMAGE, session=host) is None
+    assert host.asked == [IMAGE]
+    assert host.closed == 1
+
+
+def test_an_upload_the_data_source_cannot_read_is_named_as_such():
+    # The case this exists for: a key-value store record that is not public.
+    problem = source_mod.image_unreachable(
+        "https://api.apify.com/v2/key-value-stores/x/records/photo.jpg",
+        session=_ImageHost(status=403),
+    )
+    assert problem is not None and "HTTP 403" in problem
+
+
+def test_an_address_serving_a_web_page_is_not_an_image():
+    problem = source_mod.image_unreachable(
+        "https://detail.1688.com/offer/672715568844.html",
+        session=_ImageHost(content_type="text/html; charset=utf-8"),
+    )
+    assert problem is not None and "not an image" in problem
+
+
+def test_a_host_that_cannot_be_reached_at_all_is_reported():
+    import requests
+
+    problem = source_mod.image_unreachable(
+        IMAGE, session=_ImageHost(error=requests.ConnectionError("no route"))
+    )
+    assert problem is not None and "could not be fetched" in problem
+
+
+@pytest.mark.parametrize("content_type", ["", "application/octet-stream", "binary/image"])
+def test_an_odd_content_type_is_let_through(content_type):
+    # Refusing a picture the data source could have read would cost the buyer
+    # the search they came for; only certainties are refused.
+    assert (
+        source_mod.image_unreachable(IMAGE, session=_ImageHost(content_type=content_type))
+        is None
+    )
+
+
 # ---------------------------------------------------------------------- replay
 
 

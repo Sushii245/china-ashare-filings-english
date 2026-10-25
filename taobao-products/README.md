@@ -139,11 +139,12 @@ A photo is often all you have: a competitor's listing image, a sample on the
 desk, a screenshot from a supplier's catalogue. Guessing the Chinese keyword
 for it is the slow part of sourcing.
 
-Put the picture's web address in **Search by image** and leave the keyword
-empty. The search then runs on the image, and everything else works exactly as
-it does for a keyword: both detail levels, the quote at your quantity, the
-minimum-order filter, the same records, the same price per record — one
-data-source call per page of results.
+Drop the picture into **Search by image** — upload it in the input form, or
+paste its web address — and leave the keyword empty. The search then runs on
+the image, and everything else works exactly as it does for a keyword: both
+detail levels, the quote at your quantity, the minimum-order filter, the same
+records, the same price per record — one data-source call per page of
+results.
 
 ```json
 {
@@ -154,11 +155,12 @@ data-source call per page of results.
 }
 ```
 
-The address has to be one the data source can fetch: a public `http(s)` image
-URL. A file on your own computer cannot be read, and is refused before any
-call is made rather than coming back as an empty search you paid for. If you
-only have a local file, put it anywhere public first — an Apify key-value
-store record, a storage bucket, your own site — and paste that address.
+The picture is fetched by the data source, not by this Actor, so an address
+you paste has to be a public `http(s)` one. Before any billed call the run
+reads the address itself: a link that 404s, one behind a login, or one that
+serves a web page rather than an image fails the run then and there, with the
+reason, instead of coming back as an empty search you paid for. Reading the
+image's own host costs nothing.
 
 Given an image **and** a keyword, the image wins and the run says so in its
 log: the two are different searches, and silently blending them would make it
@@ -173,7 +175,7 @@ impossible to tell which results you got.
 | `itemIds` | array | 1688 offer ids. A pasted listing URL works too. |
 | `itemUrls` | array | 1688 listing URLs; the offer id is read out of each. |
 | `keyword` | string | Search 1688, in Chinese or English. Required for listing level, unless you search by image. |
-| `imageUrl` | string | Search by picture: a public `http(s)` address of a product photo. Wins over `keyword` when both are given. |
+| `imageUrl` | string | Search by picture: upload a photo, or paste a public `http(s)` address. Wins over `keyword` when both are given. |
 | `detailLevel` | enum | `full` fetches each listing; `listing` sells the search results, far cheaper. |
 | `quantity` | integer | Price every listing at this many pieces. |
 | `maxMinOrderQuantity` | integer | Keep only listings whose minimum order is at most this. When searching, hits over it are dropped before any detail call; left-out listings are never billed. Listings stating no minimum are kept. |

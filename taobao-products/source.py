@@ -394,6 +394,48 @@ def validate_image_url(image_url: str) -> str:
     return url
 
 
+#: Content types that prove the address is not a picture: an error page, a
+#: JSON refusal, a private-store login redirect. Anything else is let through,
+#: including a host that serves an image under a vague type.
+_NOT_AN_IMAGE = ("text/html", "text/plain", "application/json", "application/xml")
+
+
+def image_unreachable(
+    image_url: str, *, session: Any | None = None, timeout: float = 10.0
+) -> str | None:
+    """Why the data source will not be able to read this picture, if it won't.
+
+    Costs nothing billable — it reads the image's own host, not the provider —
+    and it is the difference between "your upload is in a private store" and a
+    paid search that quietly matched nothing. Only what is certain counts as a
+    problem: the fetch failing outright, or a body that is plainly a web page
+    rather than an image. A 200 under an odd content type is let through,
+    because refusing a picture the provider could have read would be worse.
+    """
+    getter = session or requests
+    try:
+        response = getter.get(
+            image_url,
+            timeout=timeout,
+            stream=True,
+            headers={"Accept": "image/*,*/*"},
+        )
+    except requests.RequestException as exc:
+        return f"the image could not be fetched ({exc})"
+    try:
+        code = response.status_code
+        if code >= 400:
+            return f"the image address returned HTTP {code}"
+        content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if content_type in _NOT_AN_IMAGE:
+            return f"the image address served {content_type}, not an image"
+    finally:
+        close = getattr(response, "close", None)
+        if callable(close):
+            close()
+    return None
+
+
 def image_search_params(config: SourceConfig, image_url: str) -> dict[str, Any]:
     """The request parameters that make a search a search-by-image.
 

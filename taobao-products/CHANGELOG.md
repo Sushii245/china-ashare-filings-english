@@ -5,6 +5,11 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
+- The picture for an image search can be uploaded in the input form, not only
+  pasted as a link, and either way the address is read once — free, on the
+  image's own host — before any billed search: a link that 404s, sits behind a
+  login or serves a web page fails the run with that reason, where before it
+  would have been a paid search that matched nothing.
 - Search by picture. `imageUrl` takes the web address of a product photo and
   the data source matches it visually, instead of matching a keyword; both
   detail levels, the quote, the minimum-order filter and the per-record price

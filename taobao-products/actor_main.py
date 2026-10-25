@@ -133,6 +133,16 @@ def _min_interval(actor_input: dict[str, Any]) -> float:
         return DEFAULT_MIN_INTERVAL
 
 
+#: Said once when a search by picture is the thing that failed. The keyword
+#: path is proven against this data source and the image path is newer, so a
+#: failure here is worth pointing at the right suspect rather than leaving the
+#: operator to read a bare HTTP status.
+IMAGE_SEARCH_HINT = (
+    " This run searched by image; if a keyword search works, the data source "
+    "may not accept the image parameter (see VALIDATION.md)."
+)
+
+
 def _image_url(actor_input: dict[str, Any]) -> str | None:
     """The reference image to search by, or None if this run searches words.
 
@@ -747,6 +757,20 @@ async def main() -> None:
                     "this data source does not serve search by image; search by "
                     "keyword instead, or name the listings by id"
                 )
+            if image_url and not os.environ.get(ENV_FIXTURES):
+                # Reading the image's own host costs nothing billable, and an
+                # upload sitting in a private store would otherwise look like
+                # a picture that simply matched nothing — after paying for the
+                # search. A fixture run makes no provider call, so it makes
+                # none here either.
+                problem = source_mod.image_unreachable(image_url)
+                if problem:
+                    raise source_mod.SourceError(
+                        f"the reference image cannot be read: {problem}. The data "
+                        "source fetches the picture itself, so it has to be a "
+                        "public address — check the link opens in a private "
+                        "browser window."
+                    )
         except (source_mod.SourceError, ValueError) as exc:
             await Actor.fail(status_message=str(exc))
             return
@@ -800,6 +824,7 @@ async def main() -> None:
             if search_error and not (returned or skipped):
                 await Actor.fail(
                     status_message=f"The data source's search failed: {search_error[1]}"
+                    + (IMAGE_SEARCH_HINT if image_url else "")
                 )
                 return
             parts = [f"Returned {returned} listing-level record(s)"]
@@ -834,6 +859,7 @@ async def main() -> None:
         if not item_ids and search_notes:
             await Actor.fail(
                 status_message=f"No listings to fetch: the data source's {search_notes[0]}."
+                + (IMAGE_SEARCH_HINT if image_url else "")
             )
             return
         if not item_ids and screened:
