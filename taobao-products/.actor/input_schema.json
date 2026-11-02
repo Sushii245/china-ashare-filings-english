@@ -14,7 +14,7 @@
       "title": "Item URLs",
       "type": "array",
       "description": "1688 listing URLs instead of ids; the offer id is read out of each.",
-      "editor": "requestListSources",
+      "editor": "stringList",
       "default": []
     },
     "keyword": {

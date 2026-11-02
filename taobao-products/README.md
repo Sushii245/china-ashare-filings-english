@@ -108,8 +108,7 @@ title available is a translation, `titleCn` is `null` and the translation is in
 - **Attributes** — material, style, target markets — in the seller's Chinese.
   A property listed several times keeps every value: `"主要销售地区": "欧洲、南美、东南亚、…"`.
 
-Real records are in [`samples/`](samples/), generated from real data-source
-responses.
+The examples on this page come from real data-source responses.
 
 ## Two detail levels
 
@@ -241,8 +240,8 @@ cleanly at the limit.
   20 records at listing level. Enough to see what the output looks like; a
   paid Apify plan lifts the limit.
 - **A run whose listings mostly come back unavailable stops early** — after
-  ten unavailable listings making up more than half of those tried, or twenty
-  in a row — and says so in its status. Unavailable listings are never
+  three in a row failing with the same data-source error, ten making up more
+  than half of those tried, or twenty in a row — and says so in its status. Unavailable listings are never
   billed, so this protects your run time, and usually means the ids are wrong
   or the data source is having a bad moment.
 - **Listings are read as published.** The listing remains the authoritative

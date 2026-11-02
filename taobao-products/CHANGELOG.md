@@ -1,10 +1,14 @@
 # Changelog
 
-## 0.1 — unreleased
+## 0.1
 
-First build. Not published yet: the data source's field maps are written from
-a real response first (VALIDATION.md).
+On the Apify Store since 2026-10-20. Newest changes first.
 
+- `discountPct` is left empty when the old and new prices are just the first
+  and last rungs of the wholesale ladder, so a bulk price does not read as a
+  promotion.
+- Item URLs is a plain list. Its previous editor also offered remote files,
+  which were never read.
 - A run stops after one batch when the data source itself is down. Three
   listings in a row failing with the same upstream sentence ends the run with
   a message saying so. Ids that fail with their own separate messages still

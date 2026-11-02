@@ -21,7 +21,8 @@ sys.path.insert(0, str(ROOT))
 import actor_main  # noqa: E402
 import source as source_mod  # noqa: E402
 import units  # noqa: E402
-from normalize import normalize_search_entry  # noqa: E402
+from models import Money, PriceTier  # noqa: E402
+from normalize import _discount_pct, normalize_search_entry  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -563,3 +564,22 @@ def test_numbers_that_are_not_finite_read_as_missing(value):
 def test_a_response_carrying_nan_reads_as_a_missing_value():
     body = '{"ErrorCode": "Ok", "Result": {"Items": {"Items": {"Content": [{"Id": "abb-1", "Price": NaN}]}}}}'
     assert _otapi_client(body).search_raw("x")[0]["Price"] is None
+
+
+# -------------------------------------------------------- what a record claims
+
+
+def _rung(low, high, price):
+    return PriceTier(min_qty=low, max_qty=high, unit_price=Money(value=price))
+
+
+def test_a_ladder_gap_is_not_reported_as_a_discount():
+    # Offer 863956881986: 46.8 and 40.8 are its first and last rungs.
+    tiers = [_rung(1, 49, 46.8), _rung(50, 199, 43.8), _rung(200, None, 40.8)]
+    assert _discount_pct(Money(value=40.8), Money(value=46.8), tiers) is None
+
+
+def test_a_real_promotion_below_the_ladder_is_still_a_discount():
+    # Offer 672715568844: 33.25 is under its cheapest rung of 35.
+    tiers = [_rung(1, 998, 40), _rung(999, None, 35)]
+    assert _discount_pct(Money(value=33.25), Money(value=35), tiers) == 5.0

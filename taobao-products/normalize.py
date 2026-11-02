@@ -615,7 +615,9 @@ def normalize(
         fetched_at=now,
     )
 
-    product.discount_pct = _discount_pct(product.price, product.original_price)
+    product.discount_pct = _discount_pct(
+        product.price, product.original_price, product.price_tiers
+    )
     if quantity is not None and quantity > 0:
         product.quote = _build_quote(product, quantity)
     return product
@@ -716,8 +718,14 @@ def _build_quote(product: Product, quantity: int) -> Quote:
     return quote
 
 
-def _discount_pct(price: Money | None, original: Money | None) -> float | None:
+def _discount_pct(
+    price: Money | None, original: Money | None, tiers: list[PriceTier] | None = None
+) -> float | None:
     """How far below the struck-through price the current one sits.
+
+    Not reported when the two prices are just the ladder's first and last
+    rungs: that gap is the bulk price, and calling it a discount would invent a
+    promotion.
 
     Compares the low end of each, so a listing that discounts a whole span is
     still comparable. Returns ``None`` unless the original is genuinely higher
@@ -727,6 +735,13 @@ def _discount_pct(price: Money | None, original: Money | None) -> float | None:
     if price is None or original is None or original.value <= 0:
         return None
     if original.value <= price.value:
+        return None
+    if (
+        tiers
+        and len(tiers) > 1
+        and original.value == tiers[0].unit_price.value
+        and price.value == tiers[-1].unit_price.value
+    ):
         return None
     return round((original.value - price.value) / original.value * 100, 1)
 
@@ -807,7 +822,9 @@ def normalize_search_entry(
         images=_normalize_images(field("image")),
         fetched_at=now,
     )
-    product.discount_pct = _discount_pct(product.price, product.original_price)
+    product.discount_pct = _discount_pct(
+        product.price, product.original_price, product.price_tiers
+    )
     if quantity is not None and quantity > 0:
         product.quote = _build_quote(product, quantity)
     return product
