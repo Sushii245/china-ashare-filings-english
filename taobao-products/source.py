@@ -161,17 +161,16 @@ class SourceConfig:
     #: response, 2026-10-25), so the flat parameter is the proven form and the
     #: only one here.
     image_param: str | None = None
-    #: An image search is a different kind of work from a keyword one: the
-    #: provider fetches the picture and runs a visual match, where a keyword is
-    #: a lookup. At the ordinary timeout it never finishes, so it gets its own,
-    #: and its own retry count, because each attempt is a billed minute.
+    #: An image search's own timeout and retry count. Set during the 2026-10-25
+    #: outage, when every endpoint was slow. Healthy, an image search answered
+    #: in seconds, like a keyword one, so this is a margin rather than a need.
     image_timeout: float | None = None
     image_max_retries: int = 1
     #: How many times a request that *timed out* is retried, however many
-    #: retries the rest of the budget allows. A read timeout means the request
-    #: reached the provider — so it is billed — and that they are hung rather
-    #: than erroring; three more attempts at a minute each is three more
-    #: charges for the same answer.
+    #: retries the rest of the budget allows. A read timeout may well have
+    #: reached the provider and counted against the quota (not confirmed
+    #: either way), and a hung provider usually hangs again, so the cap limits
+    #: what one call can cost.
     timeout_max_retries: int = 1
     page_param: str = "page"
     extra_params: dict[str, str] = dataclasses.field(default_factory=dict)
@@ -437,10 +436,9 @@ def validate_image_url(image_url: str) -> str:
 #: can serve a real image under a careless type.
 _NOT_AN_IMAGE = ("text/html", "text/plain", "application/json", "application/xml")
 
-#: Image CDNs — Shopify's, Cloudflare-fronted shops, several marketplaces —
-#: refuse a bare ``python-requests`` client outright. The probe says who it is
-#: while still looking like a browser, because the question being asked is
-#: whether the picture is there, not whether we are interesting.
+#: Some hosts refuse a bare ``python-requests`` client. None has been observed
+#: doing so here, but the guard is cheap: the probe names itself in a
+#: browser-shaped User-Agent, and a refusal only ever warns.
 _IMAGE_PROBE_HEADERS = {
     "Accept": "image/*,*/*",
     "User-Agent": "Mozilla/5.0 (compatible; apify-1688-products/0.1)",
@@ -997,12 +995,9 @@ def otapi_1688_config(api_key: str, *, page_size: int = 50) -> SourceConfig:
         # the image inside an xmlParameters document instead; this front-end
         # builds that document itself and refuses a hand-written one.
         image_param="ImageUrl",
-        # A real image search against this host does not answer inside the
-        # 30 s that a keyword search needs (which takes ~2.5 s): the provider
-        # has to fetch the picture and run a visual match. Timed out at 30 s,
-        # 2026-10-25, so it is given minutes — and one retry rather than
-        # three, since every attempt is billed and a slow search that timed
-        # out once will likely time out again.
+        # Chosen during the 2026-10-25 outage, when an image search timed out
+        # at 30 s. Healthy, on 2026-11-02, it answered in about 4 s, so 180 s
+        # is a wide margin rather than a measured need.
         image_timeout=180.0,
         image_max_retries=1,
         offset_param="framePosition",

@@ -238,67 +238,44 @@ maps exactly as live data would be. Without `SOURCE_PROVIDER` the replay uses
 the default map and proves nothing. Check the records, then check
 that the bogus id came back with a status and **was not billed**.
 
-## 2026-10-25 — the data source is refusing everything
+## 2026-10-25 outage, over by 2026-11-02
 
-Found while smoke-testing the build before releasing it. Right now, every
-endpoint answers the same way, slowly:
+On 2026-10-25 every endpoint answered `NotAvailable: The application 'Storage'
+is not available.`, or timed out: image search 65 s, keyword search 108 s,
+detail fetch 54 s, against a normal 1-2 s. The key was fine, since a rejected
+key is a 401/403. Its end was not observed. On 2026-11-02 a keyword run on
+build 0.1.16 returned a full page of 50 hits.
 
-    NotAvailable: The application 'Storage' is not available.
+Two conclusions drawn during it were wrong: that image search needs a Storage
+application this instance lacks, and that an image search takes minutes. Both
+were the outage.
 
-- image search (flat `ImageUrl`): 65 s, refused;
-- keyword search (`ItemTitle=T恤 批发`), the path that has worked since
-  2026-10-19 and that the daily automated test uses: 108 s, refused;
-- detail fetch (`BatchGetItemFullInfo`, id 669724481680): 54 s, refused,
-  reported as `upstream_error` and not billed.
+## Image search — proven live, 2026-11-02
 
-Normal latency on this host is ~2.5 s, so it is degraded, not merely erroring.
-By 14:58 local it had stopped answering at all: a keyword probe timed out,
-four attempts, which is what capped retries on a timeout to one — a hung
-provider was costing four billed attempts per run.
-The credentials are fine: a rejected key is a 401/403 and raises
-`AuthenticationFailed`, which none of these did. RapidAPI's discussion board
-for the API has nothing recent (its newest thread is three years old and
-unanswered, which says something about support there).
+Build 0.1.16, listing level, no keyword sent:
 
-**What this does to the published Actor.** Build 0.1.4, what buyers run today,
-reads an error in a search body as a page with no hits — so a listing-mode or
-keyword run right now *succeeds*, returns nothing, and says nothing was wrong.
-Nothing is billed, but nothing is explained either. The fix in this branch
-raises it instead, with the provider's own message. Detail runs were never
-affected: that path has always checked the body.
+- **Main picture of offer 672715568844** (`O1CN01ZE5qNE1knTgz7grRJ`): 50 hits in
+  about 4 s. That offer came back at **rank 2**, and another listing from the
+  same factory at rank 5. The free-plan cap kept the first 20 of the 50.
+- **Its grey variant's picture** (`O1CN01ha5KYW1knTcju4X9C`): 50 hits in about
+  2 s, first 5 read. All T-shirts, the target not among them. This picture was
+  earlier called the main picture, which was wrong.
+- Of the 20 records, 13 have T-shirt or short-sleeve titles. Most of the rest
+  are other upper-body garments such as sweatshirts, so precision falls off
+  down the page.
 
-## Image search — form proven, verdict suspended
+**Form:** a flat `ImageUrl` parameter is accepted. OTAPI's `xmlParameters`
+document is refused: `ContractViolation: Search parameters must have at least
+one of these values: CategoryId, VendorName, VendorId, ItemTitle, BrandId,
+Configurators`.
 
-What the four runs of 2026-10-25 do establish:
+**Not tested:** a picture from outside 1688's CDN, a product other than
+clothing, or an uploaded file. Whether that upload path produces a URL the data
+source can read is unknown. No raw response was saved either, since these runs
+keep only normalised records, so the replay tests still fall back to the
+keyword page.
 
-- **The parameter form.** OTAPI's documented `xmlParameters` document reaches
-  OTAPI and is refused — `ContractViolation: Search parameters must have at
-  least one of these values: CategoryId, VendorName, VendorId, ItemTitle,
-  BrandId, Configurators` — while the flat `ImageUrl` parameter this host's
-  own playground documents is accepted, no contract violation. That difference
-  is a real answer and it is what the preset now uses. The playground lists
-  `OrderBy`, `MinPrice`, `MaxPrice` and `MinVolume` beside it: unused levers.
-- **A search response carrying an error used to read as an empty page.** The
-  first image search returned a successful run with no records in 0.3 s; that
-  is now raised. The one finding here that improves the keyword path too.
-
-What is **not** established, and what I wrongly concluded before the smoke
-test: that image search needs an OTAPI "Storage" application this instance
-lacks. The same `NotAvailable: Storage` answer comes back for keyword searches
-and detail fetches, so it is the outage above, not an image-specific gap. The
-30 s timeout being too short is contaminated the same way — a keyword search
-took 108 s during the outage. The longer image budget stays anyway: it costs
-nothing when the provider is healthy, and a visual match is genuinely heavier
-than a lookup.
-
-**To settle it, once the provider is healthy** (a keyword run returning records
-is the signal), one call:
-
-    apify call -b image-test -i '{"imageUrl":"https://cbu01.alicdn.com/img/ibank/O1CN01ha5KYW1knTcju4X9C_!!2813694728-0-cib.jpg","detailLevel":"listing","maxProducts":5,"platform":"1688"}'
-
-That image is the main picture of offer 672715568844, so finding that offer in
-the results proves the match is real rather than merely accepted. Until then
-the input stays `hidden` and the Store text promises nothing.
+The input stays `hidden` until it is released on purpose.
 
 ## Before publishing
 

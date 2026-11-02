@@ -175,9 +175,8 @@ def test_a_readable_image_is_no_problem():
 
 
 def test_a_refusal_is_doubt_not_proof_because_cdns_block_us():
-    # A Shopify or Cloudflare-fronted host answers a non-browser client with
-    # 403 while serving the picture to anyone else — the data source included.
-    # Cancelling the search on our own 403 would cancel searches that work.
+    # A host may refuse this client yet serve the data source, which fetches
+    # from its own address. Our own 403 therefore warns and does not cancel.
     problem = source_mod.image_unreachable(
         "https://api.apify.com/v2/key-value-stores/x/records/photo.jpg",
         session=_ImageHost(status=403),
@@ -397,8 +396,8 @@ class _SlowSession:
 
 
 def test_an_image_search_is_given_minutes_where_a_keyword_gets_seconds():
-    # A real 30s keyword-sized budget timed out: the provider fetches the
-    # picture and runs a visual match before it can answer.
+    # The budget set during the 2026-10-25 outage; healthy searches take
+    # seconds. This pins the configuration, not a need for three minutes.
     client = _otapi_client()
     session = _SlowSession()
     client.session = session  # type: ignore[assignment]
@@ -410,8 +409,8 @@ def test_an_image_search_is_given_minutes_where_a_keyword_gets_seconds():
 
 
 def test_a_timed_out_image_search_is_retried_once_not_three_times():
-    # Each attempt is a billed minute, and a visual search that did not
-    # answer in three minutes rarely answers on the next try.
+    # A search that hung for three minutes is unlikely to answer on the next
+    # try, so the retry budget stays small.
     import requests
 
     class _Timeouts:
@@ -436,9 +435,9 @@ def test_a_timed_out_image_search_is_retried_once_not_three_times():
 
 
 def test_a_timed_out_keyword_search_is_retried_once_not_three_times():
-    # 2026-10-25: the provider hung, and every run spent four billed attempts
-    # — 30s each — on the same answer. A timeout means the request reached
-    # them, so it is charged; a hung provider must not cost four charges.
+    # 2026-10-25: the provider hung and one run made four 30s attempts for the
+    # same failure. Whether a timed-out attempt counts against the quota is
+    # unconfirmed; capping it limits the cost either way.
     import requests
 
     class _Hung:

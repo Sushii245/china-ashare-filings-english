@@ -5,50 +5,28 @@
 First build. Not published yet: the data source's field maps are written from
 a real response first (VALIDATION.md).
 
-- A run stops after one batch when the data source itself is down, instead of
-  after ten failures. Three listings in a row failing with the *same* upstream
-  sentence is the source being unavailable, not three bad ids — so the run
-  says that, and stops paying for calls that cannot succeed. Ids that fail
-  with their own separate messages still take the slower ratio breaker, so a
-  few stale ids among good ones do not cut a run short.
-- The free check on a reference image no longer cancels searches that would
-  have worked. Image CDNs refuse a bare script client, so our own 403 — or a
-  challenge page served as HTML — is doubt, not proof: it is logged and the
-  search goes ahead, while a connection that cannot be made at all still
-  stops the run. The probe also identifies itself like a browser, and an
-  address that points inside the machine running the Actor (loopback, a
-  private range, a cloud metadata address) is refused before it is fetched,
-  so the input cannot be used to ask the Actor what its own network answers.
-- A request that timed out is retried once, not three times. A read timeout
-  means the request reached the data source — so it is billed — and that they
-  are hung rather than erroring, which the next attempt will find too. While
-  the provider hung on 2026-10-25, every run spent four billed attempts of
-  30 s each to arrive at the same failure. Errors that cost nothing, like a
-  reset connection, keep the full retry budget.
-- A search the data source refused is raised, not read as a page with no
-  hits. Details were always checked for an error in the body; search was not,
-  so a refused search looked exactly like a search that found nothing — a run
-  that succeeded, returned nothing, and never said the search had not
-  happened. Found by the first live image search, which did precisely that.
-- Search by picture, written and tested but **not offered yet**. `imageUrl`
-  takes the address of a product photo — uploaded in the form or pasted — and
-  the data source matches it visually instead of matching words; both detail
-  levels, the quote, the minimum-order filter and the per-record price are the
-  same either way, at one call per page. The input is kept out of the form
-  until one live call proves a real match, which this data source cannot
-  answer while it is refusing every endpoint (VALIDATION.md). What is already
-  proven against it: the image goes out under the flat `ImageUrl` parameter
-  the provider's playground documents, not inside OTAPI's `xmlParameters`
-  document, which is refused ("Search parameters must have at least one of
-  these values: CategoryId, VendorName, VendorId, ItemTitle, BrandId,
-  Configurators"); an image search gets minutes rather than the 30 s a keyword
-  search needs, and one retry rather than three, since each attempt is billed;
-  the picture is the only condition sent, so an image the provider ignored
-  cannot come back as a page of billable keyword hits; an address the data
-  source could not read — a local path, a `data:` URI, a bare host, an upload
-  in a private store — is refused before any billed call, read once on the
-  image's own host; and an image given together with a keyword searches the
-  image and says so.
+- A run stops after one batch when the data source itself is down. Three
+  listings in a row failing with the same upstream sentence ends the run with
+  a message saying so. Ids that fail with their own separate messages still
+  take the slower ratio breaker.
+- A reference image that cannot be read with certainty no longer cancels a
+  search: a refusal or a web page at the address is logged and the search goes
+  ahead, while an address that cannot be reached at all stops the run. An
+  address inside the machine running the Actor (loopback, a private range, a
+  cloud metadata address) is refused before it is fetched.
+- A request that timed out is retried once, not three times, which limits what
+  a hung data source can cost a run. Errors such as a reset connection keep
+  the full retry budget.
+- A search the data source refused is raised, not read as a page with no hits.
+  It used to look exactly like a search that found nothing: a run that
+  succeeded, returned nothing, and never said the search had not happened.
+- Search by picture, written and proven live but **not offered yet**. `imageUrl`
+  takes the address of a product photo, and the search runs on the picture
+  instead of on words; both detail levels, the quote, the minimum-order filter
+  and the per-record price work as they do for a keyword, at one call per page.
+  In a live test the main picture of a real listing found that listing at rank
+  2 of 50. The picture is the only condition sent, and an image given together
+  with a keyword searches the image and says so.
 - `maxMinOrderQuantity` keeps only listings whose minimum order is at most
   the number given. With a keyword, search hits whose ladder already starts
   above it are dropped before any detail call; ids given directly are checked

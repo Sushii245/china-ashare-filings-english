@@ -102,28 +102,23 @@ until written from a real response; see `VALIDATION.md`.
 
 ### Searching by picture
 
-OTAPI takes its search conditions as one XML document in a single
-`xmlParameters` parameter, and an image search is that document with an
-`ImageUrl` element — the form the provider's own `BatchSearchItemsFrame`
-example uses. There is no documented flat `ImageUrl` parameter beside the flat
-`ItemTitle` this Actor's keyword search uses, and guessing one would cost a
-billed call to find out, so `SourceConfig` carries both shapes
-(`image_param` for a provider with a flat one, `xml_params_param` for OTAPI's
-document) and the preset names the documented one.
+The image goes out as a flat `ImageUrl` query parameter on
+`BatchSearchItemsFrame`, as this host's RapidAPI playground documents it.
+OTAPI's generic documentation puts it inside an `xmlParameters` document
+instead; sent that way it was refused with a `ContractViolation`.
+`SourceConfig.image_param` names the parameter, so a second provider is a
+preset change.
 
-The image is sent as the **only** condition. The temptation is to pass the
-keyword along with it, but a provider front-end that dropped the image
-parameter would then run an ordinary keyword search, and in listing mode every
-hit of it is billed — a page of plausible, unrelated records that look like a
-successful image search. With the image alone, a dropped parameter leaves no
-condition at all, which the provider refuses outright. For the same reason an
+The image is sent as the **only** condition. If a provider ignored an image
+sent alongside a keyword, the run would be an ordinary keyword search, and in
+listing mode every hit would be billed as a plausible, unrelated record. Sent
+alone, an ignored image leaves no condition at all, which OTAPI refuses. An
 image URL the provider could not fetch, and a provider with no image search in
-its config, are refused before the call rather than after it.
+its config, are refused before the call.
 
-Everything downstream is unchanged: the hits come back in the same shape as a
-keyword page, so both detail levels, the quote, the minimum-order screening
-and the paging rules are shared, and an image search costs exactly what a
-keyword search costs.
+Everything downstream is unchanged: the hits have the same shape as a keyword
+page, so both detail levels, the quote, the minimum-order screening and the
+paging rules are shared. Proven live on 2026-11-02: see `VALIDATION.md`.
 
 Two things the provider work changed in the shared code:
 
@@ -269,8 +264,8 @@ five workers the ceiling is about 120 listings a minute; at ten workers and
 measurements. None of these numbers is on the Store page, and the simulated
 ones below must not go there.*
 
-*Degraded, the same calls took 54-108 s (2026-10-25), which is why an image
-search carries its own timeout and why a timed-out request is retried once.*
+*Degraded, the same calls took 54-108 s (2026-10-25), which is why a timed-out
+request is retried once. An image search healthy took seconds, like a keyword.*
 
 
 The A-share Actor spaces its requests a second apart because it reads CNINFO's
