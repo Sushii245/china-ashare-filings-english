@@ -167,7 +167,7 @@ log says the keyword was ignored.
 |---|---|---|
 | `itemIds` | array | 1688 offer ids. A pasted listing URL works too. |
 | `itemUrls` | array | 1688 listing URLs; the offer id is read out of each. |
-| `keyword` | string | Search 1688, in Chinese or English. Listing level needs this or an image. |
+| `keyword` | string | Search 1688, in Chinese or English. Listing level needs this or an image. Ignored if ids or URLs are given. |
 | `imageUrl` | string | Search by picture: a public `http(s)` address of a product photo. Wins over `keyword` if both are given. |
 | `detailLevel` | enum | `full` fetches each listing; `listing` sells the search results, far cheaper. |
 | `quantity` | integer | Price every listing at this many pieces. |
@@ -212,7 +212,8 @@ cleanly at the limit.
 - **The minimum-order filter can only see what a search result shows.** At
   listing level a hit is screened on where its price ladder starts; a hit with
   no ladder is kept, and its stated minimum shows only at full detail, where
-  the filter checks it again before anything is billed.
+  the filter checks it again before anything is billed. A listing left out at
+  that point has used a slot, so a run can return fewer than Max products.
 - **1688 only, for now.** Taobao and Tmall are planned. Asking for them today
   is refused before any work is done rather than returning empty records.
 - **At listing level a shop name can be missing.** The data source sometimes

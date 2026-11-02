@@ -9,6 +9,10 @@ a real response first (VALIDATION.md).
   listings in a row failing with the same upstream sentence ends the run with
   a message saying so. Ids that fail with their own separate messages still
   take the slower ratio breaker.
+- Item IDs or URLs now take over from the keyword. The form prefills one, so a
+  buyer pasting a single id could be billed for unrelated search results.
+- Ids past Max products are reported in the run's status instead of dropped
+  silently, and a search with no results says so instead of asking for ids.
 - One malformed search hit no longer ends a run. It comes back as an unbilled
   `unparsable` record, and numbers too large to represent read as missing
   rather than crashing or reaching the dataset as infinity.

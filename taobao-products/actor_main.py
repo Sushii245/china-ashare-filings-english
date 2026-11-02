@@ -393,6 +393,18 @@ def _check_platform_served(platform: str, data_source: source_mod.ProductSource)
         )
 
 
+def _nothing_to_fetch(
+    actor_input: dict[str, Any], keyword: str, image_url: str | None
+) -> str:
+    """Say why a run has no listings, in terms of what the buyer actually gave."""
+    given = actor_input.get("itemIds") or actor_input.get("itemUrls")
+    if image_url or (keyword and not given):
+        return "The search found no listings."
+    if given:
+        return "No listing id could be read from the Item IDs or URLs given."
+    return "No listings to fetch: give Item IDs, Item URLs, a search keyword or an image URL."
+
+
 def _normalize_hit(
     hit: dict[str, Any],
     *,
@@ -430,8 +442,13 @@ def _resolve_ids(
     notes: list[str] | None = None,
     screened: list[str] | None = None,
     screen_pages: int = MAX_SCREENED_PAGES,
+    over_limit: list[str] | None = None,
 ) -> list[str]:
     """Collect ids from ids, URLs and a search, in that order.
+
+    A keyword is ignored once ids or URLs are given. The form prefills one, so
+    a buyer pasting ids would otherwise pay for unrelated search results they
+    never asked for. Ids past the limit go into ``over_limit``.
 
     The search is by keyword, or by reference image where the input gives one:
     both return the same hits in the same shape, so everything after this —
@@ -447,10 +464,15 @@ def _resolve_ids(
     ids: list[str] = []
     seen: set[str] = set()
 
+    left_over: list[str] = []
+
     def add(candidate: str | None) -> None:
-        if not candidate or candidate in seen or len(ids) >= limit:
+        if not candidate or candidate in seen:
             return
         seen.add(candidate)
+        if len(ids) >= limit:
+            left_over.append(candidate)
+            return
         ids.append(candidate)
 
     for raw in actor_input.get("itemIds") or []:
@@ -473,11 +495,25 @@ def _resolve_ids(
         else:
             Actor.log.warning("No listing id found in URL, skipping: %s", url)
 
+    if left_over:
+        Actor.log.warning(
+            "%d id(s) past the Max products limit of %d were not fetched.",
+            len(left_over),
+            limit,
+        )
+        if over_limit is not None:
+            over_limit.extend(left_over)
+
     # Stop as soon as a page stops contributing. Providers repeat the first
     # page when a keyword has fewer results than a page holds, and every call
     # is billed, so "the page was not empty" is not enough to keep going.
     keyword = (actor_input.get("keyword") or "").strip()
     image_url = _image_url(actor_input)
+    if keyword and not image_url and (actor_input.get("itemIds") or actor_input.get("itemUrls")):
+        Actor.log.warning(
+            "Item IDs or URLs were given, so the keyword %r was ignored.", keyword
+        )
+        keyword = ""
     searching = f"image {image_url}" if image_url else f"keyword {keyword!r}"
     max_pages = MAX_SEARCH_PAGES if max_moq is None else screen_pages
     hits_seen: set[str] = set()
@@ -763,6 +799,13 @@ async def _run_listing_mode(
             break
         page += 1
 
+    if not stop and not search_error and page > max_pages and returned + skipped < limit:
+        Actor.log.warning(
+            "Stopped after %d search pages with %d record(s), because each page "
+            "is a paid call.",
+            max_pages,
+            returned,
+        )
     return returned, skipped, filtered, stop, search_error
 
 
@@ -894,7 +937,12 @@ async def main() -> None:
                     + (IMAGE_SEARCH_HINT if image_url else "")
                 )
                 return
-            parts = [f"Returned {returned} listing-level record(s)"]
+            found_nothing = not (returned or skipped or filtered or search_error or hit_limit)
+            parts = [
+                "The search found no listings"
+                if found_nothing
+                else f"Returned {returned} listing-level record(s)"
+            ]
             if search_error:
                 parts.append(f"search page {search_error[0]} failed ({search_error[1]})")
             if plan_capped:
@@ -910,6 +958,7 @@ async def main() -> None:
 
         search_notes: list[str] = []
         screened: list[str] = []
+        over_limit: list[str] = []
         try:
             item_ids = await asyncio.to_thread(
                 _resolve_ids,
@@ -919,6 +968,7 @@ async def main() -> None:
                 search_notes,
                 screened,
                 screen_pages,
+                over_limit,
             )
         except source_mod.AuthenticationFailed as exc:
             await _fail_rejected_key(exc)
@@ -938,8 +988,7 @@ async def main() -> None:
             return
         if not item_ids:
             await Actor.set_status_message(
-                "No listings to fetch: give Item IDs, Item URLs, a search "
-                "keyword or an image URL.",
+                _nothing_to_fetch(actor_input, keyword, image_url),
                 is_terminal=True,
             )
             return
@@ -1085,6 +1134,8 @@ async def main() -> None:
             )
         if tripped:
             parts.append(f"stopped early because {tripped}, {len(pending)} not fetched")
+        if over_limit:
+            parts.append(f"{len(over_limit)} id(s) past Max products not fetched")
         if search_notes:
             parts.append(("image " if image_url else "keyword ") + search_notes[0])
         if plan_capped:

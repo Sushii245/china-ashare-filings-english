@@ -54,13 +54,13 @@ def test_request_list_editor_shape_is_flattened():
     ]
 
 
-def test_ids_urls_and_keyword_are_deduplicated_and_capped():
+def test_ids_urls_and_image_search_are_deduplicated_and_capped():
     source = FixtureSource(FIXTURES)
     ids = actor_main._resolve_ids(
         {
             "itemIds": ["600530677383", "600530677383"],   # duplicate
             "itemUrls": ["https://item.taobao.com/item.htm?id=555000111222"],
-            "keyword": "anything",                          # fixture search adds all
+            "imageUrl": "https://example.com/photo.jpg",    # fixture search adds all
         },
         source,
         limit=3,
@@ -73,9 +73,20 @@ def test_ids_urls_and_keyword_are_deduplicated_and_capped():
 def test_explicit_ids_come_before_search_results():
     source = FixtureSource(FIXTURES)
     ids = actor_main._resolve_ids(
-        {"itemIds": ["999000111222"], "keyword": "x"}, source, limit=2
+        {"itemIds": ["999000111222"], "imageUrl": "https://example.com/photo.jpg"},
+        source,
+        limit=2,
     )
     assert ids[0] == "999000111222"
+    assert len(ids) == 2
+
+
+def test_a_keyword_is_ignored_once_ids_are_given():
+    source = FixtureSource(FIXTURES)
+    ids = actor_main._resolve_ids(
+        {"itemIds": ["999000111222"], "keyword": "x"}, source, limit=2
+    )
+    assert ids == ["999000111222"]
 
 
 def test_no_input_resolves_to_nothing():

@@ -382,6 +382,72 @@ def page_with_a_bad_hit(directory: Path) -> Path:
     return directory
 
 
+OTAPI_ENV = {
+    "ACTOR_SOURCE_FIXTURES": str(FIXTURES / "otapi-1688"),
+    "SOURCE_PROVIDER": "otapi-1688",
+}
+
+
+def test_a_prefilled_keyword_cannot_bill_a_buyer_who_pasted_ids(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"itemIds": ["669724481680"], "keyword": "T恤 批发", "maxProducts": 3, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.fetched == ["669724481680"]
+    assert run.searched_pages == []
+    assert "the keyword 'T恤 批发' was ignored" in run.log
+
+
+def test_ids_past_the_limit_are_reported_not_dropped_silently(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"itemIds": ["623219903269", "669724481680", "672715568844"], "maxProducts": 1, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.fetched == ["623219903269"]
+    assert "2 id(s) past Max products not fetched" in run.log
+
+
+def test_an_image_given_with_ids_still_searches(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"itemIds": ["669724481680"], "imageUrl": IMAGE, "maxProducts": 2, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.searched_pages == [1]
+
+
+def empty_search_page(directory: Path) -> Path:
+    directory.mkdir()
+    page = {"payload": {"ErrorCode": "Ok", "Result": {"Items": {"Items": {"Content": []}}}}}
+    (directory / "_search.json").write_text(json.dumps(page), encoding="utf-8")
+    return directory
+
+
+@pytest.mark.parametrize("level", ["full", "listing"])
+def test_a_search_with_no_results_says_so(tmp_path, level):
+    run = run_actor(
+        tmp_path,
+        {"keyword": "没有这个商品", "detailLevel": level, "platform": "1688"},
+        ACTOR_SOURCE_FIXTURES=str(empty_search_page(tmp_path / "page")),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert "found no listings" in run.log
+    assert "give Item IDs" not in run.log
+
+
+def test_ids_that_cannot_be_read_are_named_as_the_problem(tmp_path):
+    run = run_actor(tmp_path, {"itemIds": ["not an id"], "keyword": "T恤", "platform": "1688"}, **OTAPI_ENV)
+    assert "No listing id could be read" in run.log
+    assert run.searched_pages == []
+
+
 def test_one_bad_hit_does_not_end_a_listing_run(tmp_path):
     # Records before the bad hit are already billed, so a crash here would
     # lose the status message and the hits after it.
@@ -539,14 +605,17 @@ def test_keyword_search_down_with_nothing_else_fails_cleanly(tmp_path):
     assert run.fetched == []
 
 
-def test_keyword_search_down_still_fetches_the_ids_given(tmp_path):
+def test_image_search_down_still_fetches_the_ids_given(tmp_path):
+    ids = ["623219903269", "669724481680"]
     run = run_actor(
-        tmp_path, {"itemIds": OK_IDS, "keyword": "x", "platform": "1688"},
+        tmp_path, {"itemIds": ids, "imageUrl": IMAGE, "platform": "1688"},
         FETCH_SPY_SEARCH_DOWN="1",
+        ACTOR_SOURCE_FIXTURES=str(FIXTURES / "otapi-1688"),
+        SOURCE_PROVIDER="otapi-1688",
     )
     assert run.proc.returncode == 0, run.log
     assert "Traceback" not in run.log
-    assert sorted(run.fetched) == sorted(OK_IDS)
+    assert sorted(run.fetched) == sorted(ids)
     assert "search failed" in status_of(run)
 
 
