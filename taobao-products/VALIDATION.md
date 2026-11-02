@@ -276,7 +276,19 @@ Configurators`.
   Alibaba1688 is temporary unavailable.` A likely reading is that it could not
   fetch the picture, but that is inferred from one call.
 
-**Not tested:** a product other than clothing, or an uploaded file, so the
+- **Full detail through an image search, with a minimum-order filter:** three
+  listings fetched and quoted, each with a real shop name and variants.
+
+**Data audit:** `VendorName` in search hits held an account id, not a name, on
+6 of 20 keyword records and 18 of 31 image records; `shopNameCn` now drops the
+`b2b-` and `BBB` forms. Plain logins such as `babybest08` are kept. It can also name a different company from full detail:
+offer 672715568844 shows 慈溪市爱玲服装厂 in search and 宁波云感服装有限公司 in
+detail. Sales were missing on 18 of 31 image records and 0 of 20 keyword ones;
+two of three of those listings also had none at full detail, so that looks
+like an absence upstream, not a mapping fault.
+
+**Not tested:** paging past the first 50 image hits, which a free-plan account
+cannot reach, a product other than clothing, or an uploaded file, so the
 input is a pasted URL (`textfield`), not the `fileupload` editor. No raw
 response was saved, since these runs keep only normalised records, so the
 replay tests still fall back to the keyword page.

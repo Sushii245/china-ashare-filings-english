@@ -215,6 +215,10 @@ cleanly at the limit.
   the filter checks it again before anything is billed.
 - **1688 only, for now.** Taobao and Tmall are planned. Asking for them today
   is refused before any work is done rather than returning empty records.
+- **At listing level a shop name can be missing.** The data source sometimes
+  gives only an account id, so `shopNameCn` is left empty and `shopId` still
+  identifies the seller. Full detail carries a shop name, which can differ
+  from the name in the search result.
 - **Image search returns similar listings, not only exact ones.** Results get
   less precise further down the page. It has been tested on clothing only. A
   picture that cannot be fetched fails the run, and the data source may report

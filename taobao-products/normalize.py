@@ -126,6 +126,23 @@ def _first_str(value: Any) -> str | None:
     return None
 
 
+#: 1688 account identifiers the data source returns in place of a shop's name:
+#: ``b2b-2217054907881f61f9`` and the opaque ``BBBjXnrewdjTa0gSAtZDHri2g``.
+_ACCOUNT_ID = re.compile(r"b2b-[0-9a-z]+|BBB[\w-]{15,}", re.IGNORECASE)
+
+
+def _shop_name(value: Any) -> str | None:
+    """The shop's name, or None where the source gave only an account id.
+
+    Seen on 6 of 20 keyword hits and 18 of 31 image hits. The id is still in
+    ``shopId``; an id in a name field would read as a shop nobody can search for.
+    """
+    name = _first_str(value)
+    if name and _ACCOUNT_ID.fullmatch(name.strip()):
+        return None
+    return name
+
+
 def _scalar(value: Any) -> str | float | int | None:
     """Keep a number a number, reduce anything else to its first string.
 
@@ -583,7 +600,7 @@ def normalize(
         shipping=shipping,
         is_presale=is_presale,
         presale_ships_within_days=units.parse_presale_days(presale_text),
-        shop_name_cn=_first_str(field("shop_name_cn")),
+        shop_name_cn=_shop_name(field("shop_name_cn")),
         shop_id=(
             config.from_wire_id(_first_str(field("shop_id")))
             if _first_str(field("shop_id"))
@@ -781,7 +798,7 @@ def normalize_search_entry(
             if stock_value is not None
             else None
         ),
-        shop_name_cn=_first_str(field("shop_name_cn")),
+        shop_name_cn=_shop_name(field("shop_name_cn")),
         shop_id=config.from_wire_id(shop_id) if shop_id else None,
         images=_normalize_images(field("image")),
         fetched_at=now,

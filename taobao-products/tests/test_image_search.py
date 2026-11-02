@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 import actor_main  # noqa: E402
 import source as source_mod  # noqa: E402
+from normalize import normalize_search_entry  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -150,8 +151,9 @@ class _ImageHost:
         self.headers_sent: dict[str, str] = {}
         self.closed = 0
 
-    def get(self, url, timeout=None, stream=None, headers=None):
+    def get(self, url, timeout=None, stream=None, headers=None, allow_redirects=True):
         self.asked.append(url)
+        self.allow_redirects = allow_redirects
         self.headers_sent = dict(headers or {})
         if self.error:
             raise self.error
@@ -181,8 +183,7 @@ def test_a_refusal_is_doubt_not_proof_because_cdns_block_us():
         "https://api.apify.com/v2/key-value-stores/x/records/photo.jpg",
         session=_ImageHost(status=403),
     )
-    assert problem is not None and "HTTP 403" in problem.message
-    assert problem.certain is False
+    assert problem is not None and "HTTP 403" in problem
 
 
 def test_the_probe_does_not_announce_itself_as_a_script():
@@ -197,21 +198,51 @@ def test_an_address_serving_a_web_page_is_doubtful_too():
         "https://detail.1688.com/offer/672715568844.html",
         session=_ImageHost(content_type="text/html; charset=utf-8"),
     )
-    assert problem is not None and "not an image" in problem.message
-    assert problem.certain is False
+    assert problem is not None and "not an image" in problem
 
 
-def test_a_host_that_cannot_be_reached_at_all_is_certain():
-    # No client gets past a connection that cannot be made, so this one is
-    # worth stopping the run for.
+def test_a_host_this_run_cannot_reach_is_only_a_warning():
+    # The data source fetches from its own address, so a failure from here
+    # proves nothing about a failure there.
     import requests
 
     problem = source_mod.image_unreachable(
         IMAGE, session=_ImageHost(error=requests.ConnectionError("no route"))
     )
-    assert problem is not None and "could not be fetched" in problem.message
-    assert problem.certain is True
+    assert problem is not None and "could not be fetched" in problem
 
+
+def test_the_probe_does_not_follow_a_redirect_into_the_run():
+    host = _ImageHost(status=302, content_type="text/html")
+    assert source_mod.image_unreachable(IMAGE, session=host) is None
+    assert host.allow_redirects is False
+
+
+def test_a_public_name_resolving_inside_the_run_is_refused(monkeypatch):
+    monkeypatch.setattr(
+        source_mod.socket,
+        "getaddrinfo",
+        lambda host, port: [(2, 1, 6, "", ("169.254.169.254", 0))],
+    )
+    with pytest.raises(source_mod.SourceError, match="inside the machine"):
+        source_mod.image_unreachable("https://rebind.example/photo.jpg")
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("b2b-2217054907881f61f9", None),
+        ("BBBjXnrewdjTa0gSAtZDHri2g", None),
+        ("中山辰铭制衣厂", "中山辰铭制衣厂"),
+        ("hyd服装批发", "hyd服装批发"),
+        ("babybest08", "babybest08"),
+    ],
+)
+def test_an_account_id_is_not_a_shop_name(name, expected):
+    hit = {"Id": "abb-1", "OriginalTitle": "T恤", "VendorName": name, "VendorId": "abb-b2b-1"}
+    product = normalize_search_entry(hit, platform="1688", config=source_mod.otapi_1688_config("k"))
+    assert product.shop_name_cn == expected
+    assert product.shop_id == "b2b-1"
 
 @pytest.mark.parametrize(
     "inside",

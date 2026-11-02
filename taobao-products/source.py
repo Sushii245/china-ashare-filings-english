@@ -31,11 +31,12 @@ import json
 import logging
 import random
 import re
+import socket
 import threading
 import time
 import urllib.parse
 from pathlib import Path
-from typing import Any, Iterable, NamedTuple, Protocol
+from typing import Any, Iterable, Protocol
 
 import requests
 
@@ -445,53 +446,51 @@ _IMAGE_PROBE_HEADERS = {
 }
 
 
-class ImageProblem(NamedTuple):
-    """Something wrong with the reference image, and how sure we are.
-
-    ``certain`` separates "nobody can fetch this" from "we could not, with our
-    client, from here". Only the first should stop a run: the data source
-    fetches the picture itself, from its own address, so refusing on our own
-    403 would cancel searches that would have worked.
-    """
-
-    certain: bool
-    message: str
+def _resolves_inside(url: str) -> bool:
+    """Whether a public-looking host name leads back inside the run's network."""
+    try:
+        found = socket.getaddrinfo(urllib.parse.urlsplit(url).hostname, None)
+    except OSError:
+        return False
+    return any(not ipaddress.ip_address(entry[4][0]).is_global for entry in found)
 
 
 def image_unreachable(
     image_url: str, *, session: Any | None = None, timeout: float = 10.0
-) -> ImageProblem | None:
-    """Why the data source may not be able to read this picture.
+) -> str | None:
+    """A warning if the picture looks unreadable from here, else None.
 
-    Costs nothing billable — it reads the image's own host, not the provider —
-    and it is the difference between "your upload is in a private store" and a
-    paid search that quietly matched nothing.
-
-    Certain, so worth stopping a run: the fetch failing outright, which no
-    client could get past. Doubtful, so worth only a warning: a refusal or a
-    web page, which may be this client being turned away rather than the
-    picture being absent.
+    Only ever a warning. The data source fetches the picture from its own
+    address, so a failure here does not prove one there, and a failed search
+    bills the buyer no records anyway. Redirects are not followed, because a
+    public address could otherwise redirect this probe into the run's own
+    network. That is the one case that raises.
     """
+    if session is None and _resolves_inside(image_url):
+        raise SourceError(
+            f"{image_url!r} is not an address the data source could reach: it "
+            "points inside the machine running this Actor. Use a public image URL."
+        )
     getter = session or requests
     try:
         response = getter.get(
-            image_url, timeout=timeout, stream=True, headers=_IMAGE_PROBE_HEADERS
+            image_url,
+            timeout=timeout,
+            stream=True,
+            allow_redirects=False,
+            headers=_IMAGE_PROBE_HEADERS,
         )
     except requests.RequestException as exc:
-        return ImageProblem(True, f"the image could not be fetched ({exc})")
+        return f"the image could not be fetched from this run ({exc})"
     try:
         code = response.status_code
+        if 300 <= code < 400:
+            return None
         if code >= 400:
-            return ImageProblem(
-                False,
-                f"the image address answered HTTP {code} to this run; the data "
-                "source may still be able to read it",
-            )
+            return f"the image address answered HTTP {code} to this run"
         content_type = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
         if content_type in _NOT_AN_IMAGE:
-            return ImageProblem(
-                False, f"the image address served {content_type}, not an image"
-            )
+            return f"the image address served {content_type}, not an image"
     finally:
         close = getattr(response, "close", None)
         if callable(close):

@@ -9,11 +9,12 @@ a real response first (VALIDATION.md).
   listings in a row failing with the same upstream sentence ends the run with
   a message saying so. Ids that fail with their own separate messages still
   take the slower ratio breaker.
-- A reference image that cannot be read with certainty no longer cancels a
-  search: a refusal or a web page at the address is logged and the search goes
-  ahead, while an address that cannot be reached at all stops the run. An
-  address inside the machine running the Actor (loopback, a private range, a
-  cloud metadata address) is refused before it is fetched.
+- An image address that looks unreadable from this run is logged and the search
+  goes ahead, since the data source fetches the picture separately. An address
+  inside the machine running the Actor is refused, and the check follows no
+  redirects.
+- `shopNameCn` is left empty where the data source gives only an account id,
+  as it did on 6 of 20 keyword hits and 18 of 31 image hits in testing.
 - A request that timed out is retried once, not three times, which limits what
   a hung data source can cost a run. Errors such as a reset connection keep
   the full retry budget.
