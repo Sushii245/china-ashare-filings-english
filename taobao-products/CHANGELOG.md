@@ -4,6 +4,8 @@
 
 On the Apify Store since 2026-10-20. Newest changes first.
 
+- Repositioned around sourcing from a photo: renamed "1688 Image Search & Scraper
+  — MOQ & Order Quotes", with image search first in the form and the README.
 - Search up to 20 pictures in one run with `imageUrls`. Max products is shared
   across them, and each record carries `searchImageUrl` and `matchRank`.
 - `discountPct` is left empty when the old and new prices are just the first

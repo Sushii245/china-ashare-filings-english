@@ -1,22 +1,24 @@
-# 1688 Scraper — Wholesale Prices, MOQ & Order Quotes
+# 1688 Image Search & Scraper — MOQ & Order Quotes
 
-**Price the order you intend to place, not the headline on the listing.**
+**Find a 1688 supplier from a photo, and see what your order would cost.**
 
-- **No captchas, no stalled runs.** This Actor does not scrape 1688's pages.
-  It reads listings through a commercial 1688 data API, so a run never sits on
-  a slider captcha, a risk-control block or a login wall until it times out.
-  A listing the data source cannot serve comes back with a `status` saying
-  why, and is not billed.
+- **Start from a photo.** Paste up to 20 product-photo addresses to find
+  suppliers for things you can see but cannot name in Chinese. A keyword or an
+  offer id works too. Each record says which photo found it and how high it
+  ranked.
 - **A quote at your quantity.** Tell it how many pieces you want; each record
   carries the unit price at that quantity, the subtotal, and whether you clear
   the seller's minimum.
 - **Filter by minimum order.** Set `maxMinOrderQuantity` to 2 and only sellers
   who take orders of 2 or fewer come back — useful for samples and first
   orders. Listings left out are never billed.
-- **Search by picture, up to 20 at once.** Paste product-photo addresses
-  instead of a keyword, to find suppliers for things you can see but cannot
-  name in Chinese. Each record says which photo found it and how high it ranked.
+- **No captchas.** This Actor does not scrape 1688's pages. It reads listings
+  through a commercial 1688 data API, so a run never sits on a slider captcha
+  or a login wall. If the data source is down, the run stops early and says so.
 - **Pay for records returned**, not for attempts.
+
+Built for sourcing: Amazon FBA and private label, dropshipping, and agents
+turning a client's photos into a supplier shortlist.
 
 On 1688 the price a listing leads with is the **cheapest** rung of its
 wholesale ladder — the price at the largest order. A real T-shirt listing
@@ -25,6 +27,42 @@ you the headline, or the ladder as text, leaves the arithmetic to you. This
 Actor does it: tell it how many pieces you want and each record
 comes back with the unit price at that quantity, the subtotal, and whether you
 clear the seller's minimum.
+
+---
+
+## Search by image
+
+A photo is often all you have, and guessing the Chinese keyword for it is the
+slow part of sourcing. Paste the picture's web address into **Search by image**
+and leave the keyword empty:
+
+```json
+{
+  "imageUrls": ["https://cbu01.alicdn.com/img/ibank/O1CN01ZE5qNE1knTgz7grRJ_!!2813694728-0-cib.jpg"],
+  "detailLevel": "listing",
+  "quantity": 100,
+  "maxProducts": 20
+}
+```
+
+Everything else works as it does for a keyword: both detail levels, the quote
+at your quantity, the minimum-order filter, the same records and the same
+prices. In a test, that listing's own main picture returned it second among
+the results, with similar T-shirts around it, and did the same from a host
+outside 1688.
+
+Give several pictures and `maxProducts` is shared evenly across them, so a run
+of 5 pictures at 50 products returns up to 10 for each. Each picture is one
+data-source search. Every record carries `searchImageUrl`, the picture that
+found it, and `matchRank`, its order among that picture's results. A listing
+found by two pictures at full detail appears once, under the first.
+
+The data source fetches the picture itself, so the address has to be public.
+A file on your own computer cannot be read and is refused before any search
+runs. If you give images and a keyword, the images are searched and the log says
+the keyword was ignored.
+
+---
 
 ---
 
@@ -132,40 +170,6 @@ in for it in `meetsMinimumOrder`.
 
 ---
 
-## Search by image
-
-A photo is often all you have, and guessing the Chinese keyword for it is the
-slow part of sourcing. Paste the picture's web address into **Search by image**
-and leave the keyword empty:
-
-```json
-{
-  "imageUrls": ["https://cbu01.alicdn.com/img/ibank/O1CN01ZE5qNE1knTgz7grRJ_!!2813694728-0-cib.jpg"],
-  "detailLevel": "listing",
-  "quantity": 100,
-  "maxProducts": 20
-}
-```
-
-Everything else works as it does for a keyword: both detail levels, the quote
-at your quantity, the minimum-order filter, the same records and the same
-prices. In a test, that listing's own main picture returned it second among
-the results, with similar T-shirts around it, and did the same from a host
-outside 1688.
-
-Give several pictures and `maxProducts` is shared evenly across them, so a run
-of 5 pictures at 50 products returns up to 10 for each. Each picture is one
-data-source search. Every record carries `searchImageUrl`, the picture that
-found it, and `matchRank`, its order among that picture's results. A listing
-found by two pictures at full detail appears once, under the first.
-
-The data source fetches the picture itself, so the address has to be public.
-A file on your own computer cannot be read and is refused before any search
-runs. If you give images and a keyword, the images are searched and the log says
-the keyword was ignored.
-
----
-
 ## Input
 
 | Field | Type | Description |
@@ -225,8 +229,9 @@ cleanly at the limit.
   gives only an account id, so `shopNameCn` is left empty and `shopId` still
   identifies the seller. Full detail carries a shop name, which can differ
   from the name in the search result.
-- **Image search returns similar listings, not only exact ones.** Results get
-  less precise further down the page. It has been tested on clothing only. A
+- **Image search returns similar listings, not only exact ones.** A match is a
+  candidate, not proof of the same product or factory, and results get less
+  precise further down the page. It has been tested on clothing only. A
   picture that cannot be fetched fails the run, and the data source may report
   that only as being temporarily unavailable.
 - **`sourceTextCn` is often `null`, and that is deliberate.** The field holds
