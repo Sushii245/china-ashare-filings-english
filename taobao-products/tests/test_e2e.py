@@ -448,6 +448,70 @@ def test_ids_that_cannot_be_read_are_named_as_the_problem(tmp_path):
     assert run.searched_pages == []
 
 
+SECOND_IMAGE = "https://example.com/photo-two.jpg"
+
+
+def test_several_images_share_the_limit_and_say_which_found_what(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE, SECOND_IMAGE], "detailLevel": "listing", "maxProducts": 4, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.searched_pages == [1, 1]
+    assert [(r["searchImageUrl"], r["matchRank"]) for r in run.records] == [
+        (IMAGE, 1), (IMAGE, 2), (SECOND_IMAGE, 1), (SECOND_IMAGE, 2),
+    ]
+
+
+def test_full_detail_keeps_a_listing_found_twice_once(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE, SECOND_IMAGE], "maxProducts": 4, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.proc.returncode == 0, run.log
+    assert run.searched_pages == [1, 1]
+    ids = [r["itemId"] for r in run.records]
+    assert len(ids) == len(set(ids)) == 2
+    assert {r["searchImageUrl"] for r in run.records} == {IMAGE}
+
+
+def test_a_limit_below_the_image_count_skips_the_rest_and_says_so(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE, SECOND_IMAGE], "detailLevel": "listing", "maxProducts": 1, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.searched_pages == [1]
+    assert "covers only the first 1 of 2 images" in run.log
+
+
+def test_a_free_plan_searches_one_image(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE, SECOND_IMAGE], "detailLevel": "listing", "platform": "1688"},
+        APIFY_USER_IS_PAYING="0",
+        **OTAPI_ENV,
+    )
+    assert run.searched_pages == [1]
+    assert "searching the first of 2 images" in run.log
+
+
+def test_a_keyword_record_has_no_image_origin(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "detailLevel": "listing", "maxProducts": 1, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.records[0]["searchImageUrl"] is None
+    assert run.records[0]["matchRank"] is None
+
+
 def test_one_bad_hit_does_not_end_a_listing_run(tmp_path):
     # Records before the bad hit are already billed, so a crash here would
     # lose the status message and the hits after it.

@@ -209,6 +209,11 @@ class Product:
     shop_id: str | None = None
     shop_scores: list[ShopScore] = dataclasses.field(default_factory=list)
 
+    #: The picture that found this listing, and its order among that picture's
+    #: results. Empty unless the run searched by image.
+    search_image_url: str | None = None
+    match_rank: int | None = None
+
     skus: list[Sku] = dataclasses.field(default_factory=list)
     #: How many variants the listing had, recorded before the array can be
     #: dropped. With includeSkus off this is the only thing left that says the
@@ -223,6 +228,8 @@ class Product:
         """Flatten to the camelCase dataset item the buyer sees."""
         return {
             "itemId": self.item_id,
+            "matchRank": self.match_rank,
+            "searchImageUrl": self.search_image_url,
             "platform": self.platform,
             "url": self.url,
             "status": self.status,

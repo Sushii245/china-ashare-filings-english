@@ -13,9 +13,9 @@
 - **Filter by minimum order.** Set `maxMinOrderQuantity` to 2 and only sellers
   who take orders of 2 or fewer come back — useful for samples and first
   orders. Listings left out are never billed.
-- **Search by picture.** Paste the address of a product photo instead of a
-  keyword, to find suppliers for something you can see but cannot name in
-  Chinese.
+- **Search by picture, up to 20 at once.** Paste product-photo addresses
+  instead of a keyword, to find suppliers for things you can see but cannot
+  name in Chinese. Each record says which photo found it and how high it ranked.
 - **Pay for records returned**, not for attempts.
 
 On 1688 the price a listing leads with is the **cheapest** rung of its
@@ -140,7 +140,7 @@ and leave the keyword empty:
 
 ```json
 {
-  "imageUrl": "https://cbu01.alicdn.com/img/ibank/O1CN01ZE5qNE1knTgz7grRJ_!!2813694728-0-cib.jpg",
+  "imageUrls": ["https://cbu01.alicdn.com/img/ibank/O1CN01ZE5qNE1knTgz7grRJ_!!2813694728-0-cib.jpg"],
   "detailLevel": "listing",
   "quantity": 100,
   "maxProducts": 20
@@ -153,10 +153,16 @@ prices. In a test, that listing's own main picture returned it second among
 the results, with similar T-shirts around it, and did the same from a host
 outside 1688.
 
+Give several pictures and `maxProducts` is shared evenly across them, so a run
+of 5 pictures at 50 products returns up to 10 for each. Each picture is one
+data-source search. Every record carries `searchImageUrl`, the picture that
+found it, and `matchRank`, its order among that picture's results. A listing
+found by two pictures at full detail appears once, under the first.
+
 The data source fetches the picture itself, so the address has to be public.
 A file on your own computer cannot be read and is refused before any search
-runs. If you give both an image and a keyword, the image is searched and the
-log says the keyword was ignored.
+runs. If you give images and a keyword, the images are searched and the log says
+the keyword was ignored.
 
 ---
 
@@ -167,7 +173,7 @@ log says the keyword was ignored.
 | `itemIds` | array | 1688 offer ids. A pasted listing URL works too. |
 | `itemUrls` | array | 1688 listing URLs; the offer id is read out of each. |
 | `keyword` | string | Search 1688, in Chinese or English. Listing level needs this or an image. Ignored if ids or URLs are given. |
-| `imageUrl` | string | Search by picture: a public `http(s)` address of a product photo. Wins over `keyword` if both are given. |
+| `imageUrls` | array | Search by picture: public `http(s)` addresses of product photos, up to 20. Wins over `keyword` if both are given. |
 | `detailLevel` | enum | `full` fetches each listing; `listing` sells the search results, far cheaper. |
 | `quantity` | integer | Price every listing at this many pieces. |
 | `maxMinOrderQuantity` | integer | Keep only listings whose minimum order is at most this. When searching, hits over it are dropped before any detail call; left-out listings are never billed. Listings stating no minimum are kept. |
@@ -237,7 +243,7 @@ cleanly at the limit.
 - **A quote is arithmetic on published prices.** It does not include shipping,
   which most 1688 listings settle per order with the seller.
 - **Runs on a free Apify plan are limited** to 3 listings at full detail, or
-  20 records at listing level. Enough to see what the output looks like; a
+  20 records at listing level, and to one picture per run. Enough to see what the output looks like; a
   paid Apify plan lifts the limit.
 - **A run whose listings mostly come back unavailable stops early** — after
   three in a row failing with the same data-source error, ten making up more

@@ -7,6 +7,7 @@
         "fields": [
           "itemId",
           "status",
+          "matchRank",
           "titleCn",
           "titleEn",
           "price",
@@ -27,6 +28,9 @@
           },
           "status": {
             "label": "Status"
+          },
+          "matchRank": {
+            "label": "Match rank"
           },
           "titleCn": {
             "label": "Title (CN)"

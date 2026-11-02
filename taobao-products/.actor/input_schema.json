@@ -24,11 +24,12 @@
       "editor": "textfield",
       "prefill": "T恤 批发"
     },
-    "imageUrl": {
+    "imageUrls": {
       "title": "Search by image",
-      "type": "string",
-      "description": "Search 1688 by picture instead of words: paste the web address of a product photo, such as a competitor's listing image. It must be a public http(s) address that opens in a private browser window, because the data source fetches the picture itself. A file on your computer cannot be read. If you also give a keyword, the image is searched and the keyword ignored.",
-      "editor": "textfield"
+      "type": "array",
+      "description": "Search 1688 by picture instead of words: paste the web address of each product photo, up to 20 in one run, such as a competitor's listing image. Each must be a public http(s) address that opens in a private browser window, because the data source fetches the picture itself. A file on your computer cannot be read. Max products is shared evenly across the images, and each record says which image found it. If you also give a keyword, the images are searched and the keyword ignored.",
+      "editor": "stringList",
+      "uniqueItems": true
     },
     "detailLevel": {
       "title": "Detail level",

@@ -583,3 +583,27 @@ def test_a_real_promotion_below_the_ladder_is_still_a_discount():
     # Offer 672715568844: 33.25 is under its cheapest rung of 35.
     tiers = [_rung(1, 998, 40), _rung(999, None, 35)]
     assert _discount_pct(Money(value=33.25), Money(value=35), tiers) == 5.0
+
+
+# ------------------------------------------------------------ several pictures
+
+
+def test_images_are_read_from_either_field_without_repeats():
+    assert actor_main._image_urls({"imageUrls": [IMAGE, f" {IMAGE} "], "imageUrl": IMAGE}) == [IMAGE]
+    assert actor_main._image_urls({"imageUrl": IMAGE}) == [IMAGE]
+    assert actor_main._image_urls({"imageUrls": IMAGE}) == [IMAGE]
+    assert actor_main._image_urls({}) == []
+
+
+def test_one_bad_image_in_a_list_is_refused():
+    with pytest.raises(source_mod.SourceError):
+        actor_main._image_urls({"imageUrls": [IMAGE, "photo.jpg"]})
+
+
+@pytest.mark.parametrize(
+    "limit,count,shares",
+    [(10, 3, [4, 3, 3]), (2, 3, [1, 1]), (0, 3, []), (-1, 2, [])],
+)
+def test_the_limit_is_shared_and_never_exceeded(limit, count, shares):
+    images = [f"https://example.com/{n}.jpg" for n in range(count)]
+    assert [share for _, share in actor_main._split_limit(limit, images)] == shares

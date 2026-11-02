@@ -74,6 +74,10 @@ DEFAULT_CONCURRENCY = 5
 FREE_PLAN_MAX_PRODUCTS = 3
 FREE_PLAN_MAX_LISTED = 20
 
+#: Most pictures one run will search. Each is a search call, however many
+#: records it returns. A free-plan run searches one.
+MAX_IMAGES_PER_RUN = 20
+
 #: The environment variable Apify sets with the starting user's plan.
 ENV_USER_IS_PAYING = "APIFY_USER_IS_PAYING"
 
@@ -166,6 +170,32 @@ def _image_url(actor_input: dict[str, Any]) -> str | None:
     if not url:
         return None
     return source_mod.validate_image_url(url)
+
+
+def _image_urls(actor_input: dict[str, Any]) -> list[str]:
+    """Every reference image in the input, validated, in order, without repeats."""
+    many = actor_input.get("imageUrls") or []
+    if isinstance(many, str):
+        many = [many]
+    urls: list[str] = []
+    for raw in [*many, actor_input.get("imageUrl")]:
+        url = _image_url({"imageUrl": raw})
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
+def _split_limit(limit: int, images: list[str]) -> list[tuple[str, int]]:
+    """Share a run's limit across images, leaving out those it cannot reach.
+
+    The limit stays a hard cap on the run. The earlier images take any
+    remainder, and an image whose share is zero is not searched.
+    """
+    if limit <= 0 or not images:
+        return []
+    base, extra = divmod(limit, len(images))
+    shares = [(url, base + (1 if index < extra else 0)) for index, url in enumerate(images)]
+    return [(url, share) for url, share in shares if share > 0]
 
 
 def _max_moq(actor_input: dict[str, Any]) -> int | None:
@@ -712,7 +742,7 @@ async def _run_listing_mode(
     towards the limit, so the run keeps paging for ones that pass — up to
     MAX_SCREENED_PAGES, since every page is a call.
     """
-    returned = skipped = filtered = 0
+    returned = skipped = filtered = rank = 0
     stop = False
     search_error: tuple[int, str] | None = None
     seen: set[str] = set()
@@ -764,6 +794,9 @@ async def _run_listing_mode(
                 filtered += 1
                 continue
 
+            rank += 1
+            if image_url:
+                product.search_image_url, product.match_rank = image_url, rank
             record = product.to_item()
             if product.status != "listed":
                 await Actor.push_data(record)
@@ -863,22 +896,38 @@ async def main() -> None:
             # Both before any call: a bad image URL, or a data source that
             # does not serve pictures at all, is a certain miss, and a search
             # page costs the same whether it finds anything or not.
-            image_url = _image_url(actor_input)
+            image_urls = _image_urls(actor_input)
+            if len(image_urls) > MAX_IMAGES_PER_RUN:
+                Actor.log.warning(
+                    "%d images given; searching the first %d.",
+                    len(image_urls),
+                    MAX_IMAGES_PER_RUN,
+                )
+                image_urls = image_urls[:MAX_IMAGES_PER_RUN]
+            known = Actor.is_at_home() or os.environ.get(ENV_USER_IS_PAYING) is not None
+            if len(image_urls) > 1 and known and not Actor.configuration.user_is_paying:
+                # Each image is a data-source call that a free run does not pay for.
+                Actor.log.warning(
+                    "Free Apify plan: searching the first of %d images. A paid "
+                    "Apify plan lifts the limit.",
+                    len(image_urls),
+                )
+                image_urls = image_urls[:1]
+            image_url = image_urls[0] if image_urls else None
             if image_url and not data_source.config.serves_image_search:
                 raise source_mod.SourceError(
                     "this data source does not serve search by image; search by "
                     "keyword instead, or name the listings by id"
                 )
-            if image_url and not os.environ.get(ENV_FIXTURES):
+            for url in () if os.environ.get(ENV_FIXTURES) else image_urls:
                 # In a thread, like every other blocking call here. A fixture
                 # run makes no provider call, so it makes none here either.
-                warning = await asyncio.to_thread(
-                    source_mod.image_unreachable, image_url
-                )
+                warning = await asyncio.to_thread(source_mod.image_unreachable, url)
                 if warning:
                     Actor.log.warning(
-                        "The reference image looks doubtful: %s. The data source "
+                        "The reference image %s looks doubtful: %s. The data source "
                         "fetches it separately, so searching anyway.",
+                        url,
                         warning,
                     )
         except (source_mod.SourceError, ValueError) as exc:
@@ -887,7 +936,8 @@ async def main() -> None:
 
         keyword = (actor_input.get("keyword") or "").strip()
         if image_url:
-            Actor.log.info("Searching by image: %s", image_url)
+            for url in image_urls:
+                Actor.log.info("Searching by image: %s", url)
             if keyword:
                 # Mixing the two is not the same search, and which one the
                 # provider would honour is not ours to guess.
@@ -914,23 +964,44 @@ async def main() -> None:
                 )
             Actor.log.info(
                 "Listing mode: selling search hits for %s.",
-                f"the image {image_url}" if image_url else repr(keyword),
+                f"{len(image_urls)} image(s)" if image_url else repr(keyword),
             )
-            try:
-                returned, skipped, filtered, hit_limit, search_error = await _run_listing_mode(
-                    data_source,
-                    keyword=keyword,
-                    platform=platform,
-                    limit=limit,
-                    quantity=quantity,
-                    is_ppe=is_ppe,
-                    max_moq=max_moq,
-                    screen_pages=screen_pages,
-                    image_url=image_url,
+            targets = _split_limit(limit, image_urls) if image_url else [(None, limit)]
+            if len(targets) < len(image_urls):
+                Actor.log.warning(
+                    "Max products of %d covers only the first %d of %d images.",
+                    limit,
+                    len(targets),
+                    len(image_urls),
                 )
+            returned = skipped = filtered = 0
+            hit_limit = False
+            search_errors: list[tuple[int, str]] = []
+            try:
+                for target, share in targets:
+                    done_now = await _run_listing_mode(
+                        data_source,
+                        keyword=keyword,
+                        platform=platform,
+                        limit=share,
+                        quantity=quantity,
+                        is_ppe=is_ppe,
+                        max_moq=max_moq,
+                        screen_pages=screen_pages,
+                        image_url=target,
+                    )
+                    returned += done_now[0]
+                    skipped += done_now[1]
+                    filtered += done_now[2]
+                    hit_limit = done_now[3]
+                    if done_now[4]:
+                        search_errors.append(done_now[4])
+                    if hit_limit:
+                        break
             except source_mod.AuthenticationFailed as exc:
                 await _fail_rejected_key(exc)
                 return
+            search_error = search_errors[0] if search_errors else None
             if search_error and not (returned or skipped):
                 await Actor.fail(
                     status_message=f"The data source's search failed: {search_error[1]}"
@@ -945,6 +1016,8 @@ async def main() -> None:
             ]
             if search_error:
                 parts.append(f"search page {search_error[0]} failed ({search_error[1]})")
+            if len(search_errors) > 1:
+                parts.append(f"{len(search_errors)} searches failed in all")
             if plan_capped:
                 parts.append(f"free Apify plan, limited to {limit}")
             if skipped:
@@ -959,10 +1032,11 @@ async def main() -> None:
         search_notes: list[str] = []
         screened: list[str] = []
         over_limit: list[str] = []
+        origins: dict[str, tuple[str, int]] = {}
         try:
             item_ids = await asyncio.to_thread(
                 _resolve_ids,
-                actor_input,
+                {**actor_input, "imageUrl": None, "keyword": None} if image_url else actor_input,
                 data_source,
                 limit,
                 search_notes,
@@ -970,6 +1044,20 @@ async def main() -> None:
                 screen_pages,
                 over_limit,
             )
+            for url, share in _split_limit(limit - len(item_ids), image_urls):
+                found = await asyncio.to_thread(
+                    _resolve_ids,
+                    {**actor_input, "itemIds": None, "itemUrls": None, "imageUrl": url},
+                    data_source,
+                    share,
+                    search_notes,
+                    screened,
+                    screen_pages,
+                )
+                for rank, item_id in enumerate(found, start=1):
+                    origins.setdefault(item_id, (url, rank))
+                    if item_id not in item_ids:
+                        item_ids.append(item_id)
         except source_mod.AuthenticationFailed as exc:
             await _fail_rejected_key(exc)
             return
@@ -1067,6 +1155,8 @@ async def main() -> None:
 
                 if not include_skus:
                     product.skus = []
+                if product.item_id in origins:
+                    product.search_image_url, product.match_rank = origins[product.item_id]
                 record = product.to_item()
 
                 if product.status != "ok":

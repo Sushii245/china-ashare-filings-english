@@ -4,6 +4,8 @@
 
 On the Apify Store since 2026-10-20. Newest changes first.
 
+- Search up to 20 pictures in one run with `imageUrls`. Max products is shared
+  across them, and each record carries `searchImageUrl` and `matchRank`.
 - `discountPct` is left empty when the old and new prices are just the first
   and last rungs of the wholesale ladder, so a bulk price does not read as a
   promotion.
