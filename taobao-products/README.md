@@ -13,6 +13,9 @@
 - **Filter by minimum order.** Set `maxMinOrderQuantity` to 2 and only sellers
   who take orders of 2 or fewer come back — useful for samples and first
   orders. Listings left out are never billed.
+- **Search by picture.** Paste the address of a product photo instead of a
+  keyword, to find suppliers for something you can see but cannot name in
+  Chinese.
 - **Pay for records returned**, not for attempts.
 
 On 1688 the price a listing leads with is the **cheapest** rung of its
@@ -116,7 +119,7 @@ variants, images, seller. One data-source call per listing.
 **Listing level** sells the search results themselves — title, price, sales,
 supplier, image — which is what you need to shortlist a hundred candidates.
 One call returns a whole page of up to 50, so it costs a fraction. Set
-`detailLevel` to `listing` and give a `keyword`. About half of 1688's search
+`detailLevel` to `listing` and give a `keyword` or an image. About half of 1688's search
 results include the wholesale ladder too, and for those a listing-level record
 carries it and quotes your quantity.
 
@@ -130,16 +133,45 @@ in for it in `meetsMinimumOrder`.
 
 ---
 
+## Search by image
+
+A photo is often all you have, and guessing the Chinese keyword for it is the
+slow part of sourcing. Paste the picture's web address into **Search by image**
+and leave the keyword empty:
+
+```json
+{
+  "imageUrl": "https://cbu01.alicdn.com/img/ibank/O1CN01ZE5qNE1knTgz7grRJ_!!2813694728-0-cib.jpg",
+  "detailLevel": "listing",
+  "quantity": 100,
+  "maxProducts": 20
+}
+```
+
+Everything else works as it does for a keyword: both detail levels, the quote
+at your quantity, the minimum-order filter, the same records and the same
+prices. In a test, that listing's own main picture returned it second among
+the results, with similar T-shirts around it, and did the same from a host
+outside 1688.
+
+The data source fetches the picture itself, so the address has to be public.
+A file on your own computer cannot be read and is refused before any search
+runs. If you give both an image and a keyword, the image is searched and the
+log says the keyword was ignored.
+
+---
+
 ## Input
 
 | Field | Type | Description |
 |---|---|---|
 | `itemIds` | array | 1688 offer ids. A pasted listing URL works too. |
 | `itemUrls` | array | 1688 listing URLs; the offer id is read out of each. |
-| `keyword` | string | Search 1688, in Chinese or English. Required for listing level. |
+| `keyword` | string | Search 1688, in Chinese or English. Listing level needs this or an image. |
+| `imageUrl` | string | Search by picture: a public `http(s)` address of a product photo. Wins over `keyword` if both are given. |
 | `detailLevel` | enum | `full` fetches each listing; `listing` sells the search results, far cheaper. |
 | `quantity` | integer | Price every listing at this many pieces. |
-| `maxMinOrderQuantity` | integer | Keep only listings whose minimum order is at most this. With a keyword, hits over it are dropped before any detail call; left-out listings are never billed. Listings stating no minimum are kept. |
+| `maxMinOrderQuantity` | integer | Keep only listings whose minimum order is at most this. When searching, hits over it are dropped before any detail call; left-out listings are never billed. Listings stating no minimum are kept. |
 | `maxProducts` | integer | Hard cap. Each listing returned with data is one billable event. |
 | `includeSkus` | boolean | Off keeps records small. `skuCount` still says how many variants there were. |
 | `concurrency` | integer | Listings fetched in parallel, 1–10. |
@@ -183,6 +215,10 @@ cleanly at the limit.
   the filter checks it again before anything is billed.
 - **1688 only, for now.** Taobao and Tmall are planned. Asking for them today
   is refused before any work is done rather than returning empty records.
+- **Image search returns similar listings, not only exact ones.** Results get
+  less precise further down the page. It has been tested on clothing only. A
+  picture that cannot be fetched fails the run, and the data source may report
+  that only as being temporarily unavailable.
 - **`sourceTextCn` is often `null`, and that is deliberate.** The field holds
   the Chinese text a value was read from, where there was text. Most figures
   here arrive as typed numbers rather than listing text, and for those there is

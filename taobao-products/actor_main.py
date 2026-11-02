@@ -141,13 +141,13 @@ def _min_interval(actor_input: dict[str, Any]) -> float:
         return DEFAULT_MIN_INTERVAL
 
 
-#: Said once when a search by picture is the thing that failed. The keyword
-#: path is proven against this data source and the image path is newer, so a
-#: failure here is worth pointing at the right suspect rather than leaving the
-#: operator to read a bare HTTP status.
+#: Said once when a search by picture is the thing that failed. A picture the
+#: data source could not fetch was refused with a vague "temporarily
+#: unavailable" in testing, so the buyer is pointed at the likeliest fix.
 IMAGE_SEARCH_HINT = (
-    " This run searched by image; if a keyword search works, the data source "
-    "may not accept the image parameter (see VALIDATION.md)."
+    " This run searched by image: check that the picture's address opens in a "
+    "private browser window. If it does, the data source may be unavailable, so "
+    "try again later."
 )
 
 

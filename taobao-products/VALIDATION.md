@@ -269,13 +269,17 @@ document is refused: `ContractViolation: Search parameters must have at least
 one of these values: CategoryId, VendorName, VendorId, ItemTitle, BrandId,
 Configurators`.
 
-**Not tested:** a picture from outside 1688's CDN, a product other than
-clothing, or an uploaded file. Whether that upload path produces a URL the data
-source can read is unknown. No raw response was saved either, since these runs
-keep only normalised records, so the replay tests still fall back to the
-keyword page.
+- **The same main picture served from outside 1688** (through
+  `images.weserv.nl`, with a query string): 50 hits, the offer again at rank 2.
+- **An address that returns 404:** the run's probe warned (Apify's address got
+  HTTP 429) and the data source answered in 0.4 s with `NotAvailable:
+  Alibaba1688 is temporary unavailable.` A likely reading is that it could not
+  fetch the picture, but that is inferred from one call.
 
-The input stays `hidden` until it is released on purpose.
+**Not tested:** a product other than clothing, or an uploaded file, so the
+input is a pasted URL (`textfield`), not the `fileupload` editor. No raw
+response was saved, since these runs keep only normalised records, so the
+replay tests still fall back to the keyword page.
 
 ## Before publishing
 

@@ -20,12 +20,13 @@ a real response first (VALIDATION.md).
 - A search the data source refused is raised, not read as a page with no hits.
   It used to look exactly like a search that found nothing: a run that
   succeeded, returned nothing, and never said the search had not happened.
-- Search by picture, written and proven live but **not offered yet**. `imageUrl`
-  takes the address of a product photo, and the search runs on the picture
+- Search by picture. `imageUrl` takes the address of a product photo, and the
+  search runs on the picture
   instead of on words; both detail levels, the quote, the minimum-order filter
   and the per-record price work as they do for a keyword, at one call per page.
   In a live test the main picture of a real listing found that listing at rank
-  2 of 50. The picture is the only condition sent, and an image given together
+  2, from 1688's own image host and from one outside it. The picture is the
+  only condition sent, and an image given together
   with a keyword searches the image and says so.
 - `maxMinOrderQuantity` keeps only listings whose minimum order is at most
   the number given. With a keyword, search hits whose ladder already starts
