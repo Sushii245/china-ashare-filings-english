@@ -21,6 +21,7 @@ Three classes of trap it exists to handle:
 
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from decimal import Decimal, InvalidOperation
@@ -91,8 +92,10 @@ def parse_cn_number(value: str | None) -> float | None:
         return None
     for mark, factor in _MULTIPLIERS:
         if suffix == mark:
-            return float(number * factor)
-    return float(number)
+            number *= factor
+            break
+    result = float(number)
+    return result if math.isfinite(result) else None
 
 
 def _money_from(text: str, raw: str) -> Money | None:
@@ -126,7 +129,7 @@ def parse_price(value: str | float | int | None) -> Money | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        return Money(value=float(value))
+        return Money(value=float(value)) if math.isfinite(value) else None
     raw = str(value).strip()
     text = normalize_text(raw)
     if not text:
@@ -175,7 +178,7 @@ def parse_sales(value: str | float | int | None) -> Sales | None:
         # A typed number states no window, no unit and no floor, and quotes no
         # listing text — so none of those are claimed. The provider's hints
         # supply the window where its field name implies one.
-        if value < 0:
+        if value < 0 or not math.isfinite(value):
             return None
         return Sales(count=int(value), is_approximate=False)
     raw = (value or "").strip()
@@ -231,7 +234,7 @@ def parse_quantity(value: str | float | int | None) -> Quantity | None:
     if value is None:
         return None
     if isinstance(value, (int, float)):
-        return Quantity(value=int(value))
+        return Quantity(value=int(value)) if math.isfinite(value) else None
     raw = str(value).strip()
     text = normalize_text(raw)
     count = parse_cn_number(text)

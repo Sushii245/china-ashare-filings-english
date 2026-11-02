@@ -373,6 +373,40 @@ def test_a_free_plan_listing_run_costs_one_call(tmp_path):
     assert "free Apify plan, limited to 20" in run.log
 
 
+def page_with_a_bad_hit(directory: Path) -> Path:
+    """The real search page, with a quantity Python's int() cannot take."""
+    real = json.loads((FIXTURES / "otapi-1688" / "_search.json").read_text(encoding="utf-8"))
+    real["payload"]["Result"]["Items"]["Items"]["Content"][2]["MasterQuantity"] = "1" * 400
+    directory.mkdir()
+    (directory / "_search.json").write_text(json.dumps(real, ensure_ascii=False), encoding="utf-8")
+    return directory
+
+
+def test_one_bad_hit_does_not_end_a_listing_run(tmp_path):
+    # Records before the bad hit are already billed, so a crash here would
+    # lose the status message and the hits after it.
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "detailLevel": "listing", "platform": "1688"},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(page_with_a_bad_hit(tmp_path / "page")),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+    assert len(run.records) == 5
+
+
+def test_one_bad_hit_does_not_end_a_filtered_search(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"keyword": "T恤 批发", "platform": "1688", "maxMinOrderQuantity": 2, "maxProducts": 2},
+        **ppe(1.0),
+        ACTOR_SOURCE_FIXTURES=str(page_with_a_bad_hit(tmp_path / "page")),
+        SOURCE_PROVIDER="otapi-1688",
+    )
+    assert run.proc.returncode == 0, run.log
+
+
 def test_a_data_source_that_is_down_stops_the_run_after_one_batch(tmp_path):
     # 2026-10-25: the provider answered "NotAvailable: The application
     # 'Storage' is not available" to everything. Twenty good ids would have

@@ -418,7 +418,11 @@ def _is_private_host(url: str) -> bool:
 def validate_image_url(image_url: str) -> str:
     """The reference image URL, trimmed, or a refusal saying what is wrong."""
     url = (image_url or "").strip()
-    if not _HTTP_URL.match(url):
+    try:
+        malformed = not _HTTP_URL.match(url) or not urllib.parse.urlsplit(url).hostname
+    except ValueError:
+        malformed = True
+    if malformed:
         raise SourceError(
             "an image search needs a public http(s) image URL, not "
             f"{image_url!r} — upload the picture somewhere the data source can "
@@ -450,7 +454,7 @@ def _resolves_inside(url: str) -> bool:
     """Whether a public-looking host name leads back inside the run's network."""
     try:
         found = socket.getaddrinfo(urllib.parse.urlsplit(url).hostname, None)
-    except OSError:
+    except (OSError, ValueError):
         return False
     return any(not ipaddress.ip_address(entry[4][0]).is_global for entry in found)
 
@@ -759,7 +763,8 @@ class UpstreamSource:
         # Parsing happens outside the retry loop on purpose: a body that is not
         # JSON will not become JSON on a second billed call.
         try:
-            return json.loads(body)
+            # NaN and Infinity are valid to Python's parser but not to JSON.
+            return json.loads(body, parse_constant=lambda _: None)
         except json.JSONDecodeError as exc:
             # A non-JSON body is not a product record, so it is safe to scan
             # for the platform's interstitial markers.

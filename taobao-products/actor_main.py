@@ -98,7 +98,7 @@ BREAKER_SAME_ERROR = 3
 #: schema default; kept here too for runs started through the API without it.
 DEFAULT_MIN_INTERVAL = 0.2
 
-_ID_IN_QUERY = re.compile(r"[?&]id=(\d+)")
+_ID_IN_QUERY = re.compile(r"[?&](?:id|offerId)=(\d+)")
 _ID_IN_OFFER = re.compile(r"/offer/(\d+)")
 
 #: A listing id on its own. Taobao, Tmall and 1688 ids are long numerics.
@@ -120,7 +120,8 @@ def item_id_from_url(url: str) -> str | None:
     """
     if not url:
         return None
-    match = _ID_IN_QUERY.search(url) or _ID_IN_OFFER.search(url)
+    # The path first: an /offer/ page can carry an unrelated ?id= tracking value.
+    match = _ID_IN_OFFER.search(url) or _ID_IN_QUERY.search(url)
     return match.group(1) if match else None
 
 
@@ -392,6 +393,36 @@ def _check_platform_served(platform: str, data_source: source_mod.ProductSource)
         )
 
 
+def _normalize_hit(
+    hit: dict[str, Any],
+    *,
+    platform: str,
+    quantity: int | None,
+    config: source_mod.SourceConfig,
+) -> normalize_mod.Product:
+    """Normalise one search hit, turning a failure into an unbilled record.
+
+    Earlier hits on the page may already be billed, so one malformed hit must
+    not end the run. Full detail is guarded the same way in ``_fetch_chunk``.
+    """
+    try:
+        return normalize_mod.normalize_search_entry(
+            hit, platform=platform, quantity=quantity, config=config
+        )
+    except Exception as exc:
+        ids = source_mod._ids_from_hits([hit], config)
+        return normalize_mod.normalize(
+            source_mod.RawProduct(
+                item_id=ids[0] if ids else "",
+                platform=platform,
+                payload=None,
+                status="unparsable",
+                status_detail=str(exc),
+            ),
+            config=config,
+        )
+
+
 def _resolve_ids(
     actor_input: dict[str, Any],
     data_source: source_mod.ProductSource,
@@ -462,8 +493,8 @@ def _resolve_ids(
                 for hit in data_source.search_raw(
                     keyword, page=page, image_url=image_url
                 ):
-                    product = normalize_mod.normalize_search_entry(
-                        hit, platform=platform, config=data_source.config
+                    product = _normalize_hit(
+                        hit, platform=platform, quantity=None, config=data_source.config
                     )
                     if not product.item_id:
                         continue
@@ -684,7 +715,7 @@ async def _run_listing_mode(
         for entry in entries:
             if returned + skipped >= limit:
                 break
-            product = normalize_mod.normalize_search_entry(
+            product = _normalize_hit(
                 entry, platform=platform, quantity=quantity, config=data_source.config
             )
             if product.item_id and product.item_id in seen:

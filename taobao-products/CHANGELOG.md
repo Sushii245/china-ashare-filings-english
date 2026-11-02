@@ -9,6 +9,11 @@ a real response first (VALIDATION.md).
   listings in a row failing with the same upstream sentence ends the run with
   a message saying so. Ids that fail with their own separate messages still
   take the slower ratio breaker.
+- One malformed search hit no longer ends a run. It comes back as an unbilled
+  `unparsable` record, and numbers too large to represent read as missing
+  rather than crashing or reaching the dataset as infinity.
+- Mobile links carrying `offerId=` are read in Item URLs, and an `/offer/` link
+  with an unrelated `?id=` value now gives the offer's own id.
 - An image address that looks unreadable from this run is logged and the search
   goes ahead, since the data source fetches the picture separately. An address
   inside the machine running the Actor is refused, and the check follows no

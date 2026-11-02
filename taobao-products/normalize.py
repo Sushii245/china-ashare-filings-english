@@ -9,6 +9,7 @@ that works on the sample and fails in production.
 
 from __future__ import annotations
 
+import math
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -154,7 +155,7 @@ def _scalar(value: Any) -> str | float | int | None:
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return value
+        return value if math.isfinite(value) else None
     return _first_str(value)
 
 
@@ -704,10 +705,13 @@ def _build_quote(product: Product, quantity: int) -> Quote:
     if quote.unit_price is not None:
         # Derived, so it carries no source text: the listing never printed it.
         high = quote.unit_price.value_max
-        quote.subtotal = Money(
-            value=round(quote.unit_price.value * quantity, 2),
-            value_max=round(high * quantity, 2) if high is not None else None,
-        )
+        low_total = quote.unit_price.value * quantity
+        high_total = high * quantity if high is not None else None
+        if math.isfinite(low_total) and (high_total is None or math.isfinite(high_total)):
+            quote.subtotal = Money(
+                value=round(low_total, 2),
+                value_max=round(high_total, 2) if high_total is not None else None,
+            )
 
     return quote
 

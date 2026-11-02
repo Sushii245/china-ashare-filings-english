@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 
 import actor_main  # noqa: E402
 import source as source_mod  # noqa: E402
+import units  # noqa: E402
 from normalize import normalize_search_entry  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -511,3 +512,54 @@ def test_an_error_that_is_not_a_timeout_keeps_the_full_retry_budget():
     with pytest.raises(source_mod.SourceError):
         client.search_raw("T恤 批发")
     assert client.session.calls == 4
+
+
+# ---------------------------------------------------- malformed data and input
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("https://detail.m.1688.com/page/index.html?offerId=612345678901", "612345678901"),
+        ("https://detail.1688.com/offer/612345678901.html?id=999999", "612345678901"),
+        ("https://item.taobao.com/item.htm?id=600530677383", "600530677383"),
+    ],
+)
+def test_the_listing_id_is_read_from_the_right_place(url, expected):
+    assert actor_main.item_id_from_url(url) == expected
+
+
+@pytest.mark.parametrize("bad", ["http://[bad/x.jpg", "https://", "https:///photo.jpg"])
+def test_a_malformed_image_address_gets_the_plain_refusal(bad):
+    with pytest.raises(source_mod.SourceError, match="public http"):
+        source_mod.validate_image_url(bad)
+
+
+def test_a_host_name_too_long_to_resolve_is_not_a_crash():
+    assert source_mod._resolves_inside("https://" + "a" * 300 + ".com/x.jpg") is False
+
+
+def test_a_hit_that_cannot_be_normalised_comes_back_unbilled(monkeypatch):
+    def boom(*args, **kwargs):
+        raise OverflowError("bad hit")
+
+    monkeypatch.setattr(actor_main.normalize_mod, "normalize_search_entry", boom)
+    product = actor_main._normalize_hit(
+        {"Id": "abb-612345678901"},
+        platform="1688",
+        quantity=None,
+        config=source_mod.otapi_1688_config("k"),
+    )
+    assert product.status == "unparsable"
+    assert product.item_id == "612345678901"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), "1" * 400])
+def test_numbers_that_are_not_finite_read_as_missing(value):
+    assert units.parse_price(value) is None
+    assert units.parse_quantity(value) is None
+
+
+def test_a_response_carrying_nan_reads_as_a_missing_value():
+    body = '{"ErrorCode": "Ok", "Result": {"Items": {"Items": {"Content": [{"Id": "abb-1", "Price": NaN}]}}}}'
+    assert _otapi_client(body).search_raw("x")[0]["Price"] is None
