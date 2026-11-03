@@ -19,7 +19,11 @@
 - **Pay for records returned**, not for attempts.
 
 Built for sourcing: Amazon FBA and private label, dropshipping, and agents
-turning a client's photos into a supplier shortlist.
+turning a client's photos into a supplier shortlist. Typical starting points are
+an Amazon or Shopify product photo, a competitor's listing image, or a picture
+of a sample. A browser extension can search one photo at a time; this searches
+up to 20 per run, prices each match at your quantity, and returns the result as
+data you can sort, export or call from code and AI agents.
 
 On 1688 the price a listing leads with is the **cheapest** rung of its
 wholesale ladder — the price at the largest order. A real T-shirt listing
@@ -31,7 +35,7 @@ clear the seller's minimum.
 
 ---
 
-## Search by image
+## Search by image — 1688 reverse image search
 
 A photo is often all you have, and guessing the Chinese keyword for it is the
 slow part of sourcing. Paste the picture's web address into **Search by image**
