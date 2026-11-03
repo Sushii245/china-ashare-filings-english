@@ -1,0 +1,638 @@
+"""Tests for searching by picture rather than by words.
+
+The buyer's case is a photo with no name attached: a competitor's listing
+image, a sample on a desk. What matters here is that the picture is the only
+condition sent — a search that silently falls back to words returns a page of
+plausible, unrelated hits, and in listing mode each one is billed — and that
+an image the data source could never read is refused before a call is spent.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+import actor_main  # noqa: E402
+import source as source_mod  # noqa: E402
+import units  # noqa: E402
+from models import Money, PriceTier, Quote  # noqa: E402
+from normalize import _discount_pct, normalize_search_entry  # noqa: E402
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+IMAGE = "https://cbu01.alicdn.com/img/ibank/O1CN01ha5KYW1knTcju4X9C_!!2813694728-0-cib.jpg"
+
+
+class _Session:
+    """Records the parameters of every call instead of making one."""
+
+    def __init__(self, body: str = '{"Result": {"Items": {"Items": {"Content": []}}}}') -> None:
+        self.body = body
+        self.calls: list[dict] = []
+        self.headers: dict[str, str] = {}
+
+    def get(self, url, params=None, timeout=None):
+        self.calls.append(dict(params or {}))
+
+        class R:
+            status_code = 200
+            text = self.body
+
+            def raise_for_status(self) -> None:
+                pass
+
+            def json(inner):
+                return json.loads(self.body)
+
+        return R()
+
+
+def _otapi_client(body: str | None = None) -> source_mod.UpstreamSource:
+    config = source_mod.otapi_1688_config("key")
+    config.min_interval = 0.0
+    config.max_retries = 0
+    config.backoff_base = 0.0
+    client = source_mod.UpstreamSource(config, platform="1688")
+    client.session = _Session(body) if body else _Session()  # type: ignore[assignment]
+    return client
+
+
+# --------------------------------------------------------------- the wire form
+
+
+def test_the_image_goes_out_under_the_parameter_the_provider_documents():
+    # ImageUrl as a flat query parameter, per this host's own playground and a
+    # real run. A hand-written xmlParameters document — OTAPI's generic form —
+    # was refused: "Search parameters must have at least one of these values:
+    # CategoryId, VendorName, VendorId, ItemTitle, BrandId, Configurators".
+    client = _otapi_client()
+    client.search_raw(image_url=IMAGE)
+    sent = client.session.calls[0]
+    assert sent["ImageUrl"] == IMAGE
+    assert "xmlParameters" not in sent
+    assert sent["framePosition"] == 0
+    assert sent["language"] == "en"
+
+
+def test_the_picture_is_the_only_condition_sent():
+    # A keyword alongside it would turn a dropped image parameter into a page
+    # of ordinary keyword hits — billable, and nothing to do with the photo.
+    client = _otapi_client()
+    client.search_raw("T恤 批发", image_url=IMAGE)
+    sent = client.session.calls[0]
+    assert "ItemTitle" not in sent
+    assert sent["ImageUrl"] == IMAGE
+
+
+def test_the_url_is_sent_as_given():
+    # requests encodes the query string, so nothing here may pre-escape it.
+    url = "https://shop.example/p.jpg?w=800&h=600"
+    params = source_mod.image_search_params(source_mod.otapi_1688_config("k"), url)
+    assert params == {"ImageUrl": url}
+
+
+def test_a_provider_naming_the_parameter_differently_is_followed():
+    config = source_mod.SourceConfig(base_url="https://provider.example", image_param="img_url")
+    assert source_mod.image_search_params(config, IMAGE) == {"img_url": IMAGE}
+
+
+def test_paging_an_image_search_works_like_paging_a_keyword_one():
+    client = _otapi_client()
+    client.search_raw(image_url=IMAGE, page=3)
+    sent = client.session.calls[0]
+    assert sent["framePosition"] == 100
+    assert sent["frameSize"] == 50
+
+
+# ------------------------------------------------------- refusing certain misses
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "/Users/me/Desktop/sample.jpg",
+        "data:image/png;base64,iVBORw0KGgo=",
+        "cbu01.alicdn.com/img/x.jpg",
+        "",
+        "   ",
+    ],
+)
+def test_an_image_the_provider_cannot_read_is_refused_before_any_call(bad):
+    client = _otapi_client()
+    with pytest.raises(source_mod.SourceError):
+        client.search_raw(image_url=bad)
+    assert client.session.calls == []
+
+
+def test_a_provider_without_image_search_says_so():
+    config = source_mod.SourceConfig(base_url="https://provider.example")
+    assert config.serves_image_search is False
+    with pytest.raises(source_mod.SourceError, match="does not serve search by image"):
+        source_mod.image_search_params(config, IMAGE)
+
+
+def test_the_otapi_preset_serves_image_search():
+    assert source_mod.otapi_1688_config("k").serves_image_search is True
+
+
+# ------------------------------------------------- is the picture readable at all
+
+
+class _ImageHost:
+    """Stands in for whatever is serving the reference image."""
+
+    def __init__(self, status=200, content_type="image/jpeg", error=None) -> None:
+        self.status, self.content_type, self.error = status, content_type, error
+        self.asked: list[str] = []
+        self.headers_sent: dict[str, str] = {}
+        self.closed = 0
+
+    def get(self, url, timeout=None, stream=None, headers=None, allow_redirects=True):
+        self.asked.append(url)
+        self.allow_redirects = allow_redirects
+        self.headers_sent = dict(headers or {})
+        if self.error:
+            raise self.error
+        host = self
+
+        class R:
+            status_code = host.status
+            headers = {"Content-Type": host.content_type}
+
+            def close(inner):
+                host.closed += 1
+
+        return R()
+
+
+def test_a_readable_image_is_no_problem():
+    host = _ImageHost()
+    assert source_mod.image_unreachable(IMAGE, session=host) is None
+    assert host.asked == [IMAGE]
+    assert host.closed == 1
+
+
+def test_a_refusal_is_doubt_not_proof_because_cdns_block_us():
+    # A host may refuse this client yet serve the data source, which fetches
+    # from its own address. Our own 403 therefore warns and does not cancel.
+    problem = source_mod.image_unreachable(
+        "https://api.apify.com/v2/key-value-stores/x/records/photo.jpg",
+        session=_ImageHost(status=403),
+    )
+    assert problem is not None and "HTTP 403" in problem
+
+
+def test_the_probe_does_not_announce_itself_as_a_script():
+    host = _ImageHost()
+    source_mod.image_unreachable(IMAGE, session=host)
+    assert "python-requests" not in host.headers_sent.get("User-Agent", "")
+    assert host.headers_sent["User-Agent"].startswith("Mozilla/5.0")
+
+
+def test_an_address_serving_a_web_page_is_doubtful_too():
+    problem = source_mod.image_unreachable(
+        "https://detail.1688.com/offer/672715568844.html",
+        session=_ImageHost(content_type="text/html; charset=utf-8"),
+    )
+    assert problem is not None and "not an image" in problem
+
+
+def test_a_host_this_run_cannot_reach_is_only_a_warning():
+    # The data source fetches from its own address, so a failure from here
+    # proves nothing about a failure there.
+    import requests
+
+    problem = source_mod.image_unreachable(
+        IMAGE, session=_ImageHost(error=requests.ConnectionError("no route"))
+    )
+    assert problem is not None and "could not be fetched" in problem
+
+
+def test_the_probe_does_not_follow_a_redirect_into_the_run():
+    host = _ImageHost(status=302, content_type="text/html")
+    assert source_mod.image_unreachable(IMAGE, session=host) is None
+    assert host.allow_redirects is False
+
+
+def test_a_public_name_resolving_inside_the_run_is_refused(monkeypatch):
+    monkeypatch.setattr(
+        source_mod.socket,
+        "getaddrinfo",
+        lambda host, port: [(2, 1, 6, "", ("169.254.169.254", 0))],
+    )
+    with pytest.raises(source_mod.SourceError, match="inside the machine"):
+        source_mod.image_unreachable("https://rebind.example/photo.jpg")
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("b2b-2217054907881f61f9", None),
+        ("BBBjXnrewdjTa0gSAtZDHri2g", None),
+        ("中山辰铭制衣厂", "中山辰铭制衣厂"),
+        ("hyd服装批发", "hyd服装批发"),
+        ("babybest08", "babybest08"),
+    ],
+)
+def test_an_account_id_is_not_a_shop_name(name, expected):
+    hit = {"Id": "abb-1", "OriginalTitle": "T恤", "VendorName": name, "VendorId": "abb-b2b-1"}
+    product = normalize_search_entry(hit, platform="1688", config=source_mod.otapi_1688_config("k"))
+    assert product.shop_name_cn == expected
+    assert product.shop_id == "b2b-1"
+
+@pytest.mark.parametrize(
+    "inside",
+    [
+        "http://localhost/photo.jpg",
+        "http://127.0.0.1:8080/photo.jpg",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.0.0.5/photo.jpg",
+        "http://192.168.1.4/photo.jpg",
+        "http://[::1]/photo.jpg",
+        "http://metadata.internal/photo.jpg",
+    ],
+)
+def test_an_address_inside_the_run_is_refused_before_it_is_fetched(inside):
+    # The probe fetches whatever the input names, from inside the run, and
+    # reports the status: without this, the input is a way to ask the Actor
+    # which internal addresses answer.
+    with pytest.raises(source_mod.SourceError, match="inside the machine"):
+        source_mod.validate_image_url(inside)
+
+
+@pytest.mark.parametrize("content_type", ["", "application/octet-stream", "binary/image"])
+def test_an_odd_content_type_is_let_through(content_type):
+    # Refusing a picture the data source could have read would cost the buyer
+    # the search they came for; only certainties are refused.
+    assert (
+        source_mod.image_unreachable(IMAGE, session=_ImageHost(content_type=content_type))
+        is None
+    )
+
+
+# ---------------------------------------------------------------------- replay
+
+
+def test_an_image_search_replays_its_own_capture(tmp_path):
+    (tmp_path / "_search.json").write_text(
+        json.dumps({"items": [{"num_iid": "111", "title": "by keyword"}]}),
+        encoding="utf-8",
+    )
+    (tmp_path / "_search_image.json").write_text(
+        json.dumps({"items": [{"num_iid": "222", "title": "by image"}]}),
+        encoding="utf-8",
+    )
+    fixture = source_mod.FixtureSource(tmp_path, platform="1688")
+    assert fixture.search("T恤") == ["111"]
+    assert fixture.search(image_url=IMAGE) == ["222"]
+
+
+def test_replay_falls_back_to_the_keyword_page_when_no_image_page_was_captured(tmp_path):
+    (tmp_path / "_search.json").write_text(
+        json.dumps({"items": [{"num_iid": "111", "title": "whatever"}]}),
+        encoding="utf-8",
+    )
+    fixture = source_mod.FixtureSource(tmp_path, platform="1688")
+    assert fixture.search(image_url=IMAGE) == ["111"]
+
+
+def test_replay_refuses_an_image_it_could_not_have_fetched(tmp_path):
+    fixture = source_mod.FixtureSource(tmp_path, platform="1688")
+    with pytest.raises(source_mod.SourceError):
+        fixture.search(image_url="sample.jpg")
+
+
+# -------------------------------------------------------------- the Actor's input
+
+
+class _RecordingSource:
+    """A data source that remembers what each search was asked to look for."""
+
+    def __init__(self) -> None:
+        self.config = source_mod.otapi_1688_config("k")
+        self.asked: list[tuple[str, str | None]] = []
+
+    def fetch_product(self, item_id):  # pragma: no cover - not used here
+        raise AssertionError("not expected")
+
+    def search(self, keyword="", *, page=1, image_url=None):
+        self.asked.append((keyword, image_url))
+        return ["669724481680"] if page == 1 else []
+
+    def search_raw(self, keyword="", *, page=1, image_url=None):
+        self.asked.append((keyword, image_url))
+        return [{"Id": "abb-669724481680"}] if page == 1 else []
+
+
+def test_an_image_in_the_input_is_what_gets_searched():
+    data_source = _RecordingSource()
+    ids = actor_main._resolve_ids({"imageUrl": IMAGE}, data_source, limit=10)
+    assert ids == ["669724481680"]
+    assert data_source.asked[0] == ("", IMAGE)
+
+
+def test_an_image_wins_over_a_keyword_given_with_it():
+    data_source = _RecordingSource()
+    actor_main._resolve_ids({"imageUrl": IMAGE, "keyword": "T恤"}, data_source, limit=10)
+    # The keyword travels along but the image is what the provider is given,
+    # and `source` sends one condition only.
+    assert data_source.asked[0][1] == IMAGE
+
+
+def test_a_run_with_neither_searches_nothing():
+    data_source = _RecordingSource()
+    assert actor_main._resolve_ids({"itemIds": ["612345678901"]}, data_source, limit=10) == [
+        "612345678901"
+    ]
+    assert data_source.asked == []
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (None, None),
+        ("", None),
+        ("  ", None),
+        (f"  {IMAGE}  ", IMAGE),
+    ],
+)
+def test_reading_the_image_url_out_of_the_input(value, expected):
+    assert actor_main._image_url({"imageUrl": value}) == expected
+
+
+# ------------------------------------------- a refused search is not an empty one
+
+
+def test_a_search_the_provider_refused_is_raised_not_read_as_empty():
+    # The first live image search came back as a successful run with no
+    # records in 0.3s: the body carried the provider's error and the hit
+    # scan simply found no hits at the configured paths. Details were always
+    # checked this way; search was not.
+    body = json.dumps(
+        {"ErrorCode": "InvalidParameters", "ErrorDescription": "xmlParameters is required"}
+    )
+    client = _otapi_client(body)
+    with pytest.raises(source_mod.SourceError, match="refused the search"):
+        client.search_raw(image_url=IMAGE)
+
+
+def test_a_successful_search_body_still_reads_as_success():
+    # OTAPI writes ErrorCode "Ok" on a good response; that must not read as
+    # an error, or every keyword search fails.
+    body = json.dumps(
+        {
+            "ErrorCode": "Ok",
+            "Result": {"Items": {"Items": {"Content": [{"Id": "abb-1"}]}}},
+        }
+    )
+    assert _otapi_client(body).search(image_url=IMAGE) == ["1"]
+
+
+def test_the_raw_response_is_still_returned_for_a_capture():
+    # capture.py saves search_response(): a refusal is exactly the payload
+    # worth keeping, so the raising belongs in search_raw, not there.
+    body = json.dumps({"ErrorCode": "InvalidParameters"})
+    assert _otapi_client(body).search_response(image_url=IMAGE) == {
+        "ErrorCode": "InvalidParameters"
+    }
+
+
+# --------------------------------------------- an image search is slow work
+
+
+class _SlowSession:
+    """Records the timeout each call was given."""
+
+    def __init__(self, body='{"ErrorCode": "Ok", "Result": {"Items": {"Items": {"Content": []}}}}'):
+        self.body = body
+        self.timeouts: list[float | None] = []
+        self.headers: dict[str, str] = {}
+
+    def get(self, url, params=None, timeout=None):
+        self.timeouts.append(timeout)
+        host = self
+
+        class R:
+            status_code = 200
+            text = host.body
+
+            def raise_for_status(inner):
+                pass
+
+        return R()
+
+
+def test_an_image_search_is_given_minutes_where_a_keyword_gets_seconds():
+    # The budget set during the 2026-10-25 outage; healthy searches take
+    # seconds. This pins the configuration, not a need for three minutes.
+    client = _otapi_client()
+    session = _SlowSession()
+    client.session = session  # type: ignore[assignment]
+    client.search_raw("T恤 批发")
+    client.search_raw(image_url=IMAGE)
+    keyword_budget, image_budget = session.timeouts
+    assert keyword_budget == 30.0
+    assert image_budget == 180.0
+
+
+def test_a_timed_out_image_search_is_retried_once_not_three_times():
+    # A search that hung for three minutes is unlikely to answer on the next
+    # try, so the retry budget stays small.
+    import requests
+
+    class _Timeouts:
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url, params=None, timeout=None):
+            self.calls += 1
+            raise requests.ConnectTimeout("read timed out")
+
+    client = _otapi_client()
+    client.config.backoff_base = 0.0
+    client.session = _Timeouts()  # type: ignore[assignment]
+    with pytest.raises(source_mod.SourceError):
+        client.search_raw(image_url=IMAGE)
+    assert client.session.calls == 2
+
+
+# ------------------------------------------- a hung provider cannot bill four times
+
+
+def test_a_timed_out_keyword_search_is_retried_once_not_three_times():
+    # 2026-10-25: the provider hung and one run made four 30s attempts for the
+    # same failure. Whether a timed-out attempt counts against the quota is
+    # unconfirmed; capping it limits the cost either way.
+    import requests
+
+    class _Hung:
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url, params=None, timeout=None):
+            self.calls += 1
+            raise requests.ReadTimeout("read timed out")
+
+    client = _otapi_client()
+    client.config.backoff_base = 0.0
+    client.config.max_retries = 3
+    client.session = _Hung()  # type: ignore[assignment]
+    with pytest.raises(source_mod.SourceError):
+        client.search_raw("T恤 批发")
+    assert client.session.calls == 2
+
+
+def test_an_error_that_is_not_a_timeout_keeps_the_full_retry_budget():
+    # A reset connection costs nothing and may well succeed next time.
+    import requests
+
+    class _Flaky:
+        headers: dict[str, str] = {}
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def get(self, url, params=None, timeout=None):
+            self.calls += 1
+            raise requests.ConnectionError("reset")
+
+    client = _otapi_client()
+    client.config.backoff_base = 0.0
+    client.config.max_retries = 3
+    client.session = _Flaky()  # type: ignore[assignment]
+    with pytest.raises(source_mod.SourceError):
+        client.search_raw("T恤 批发")
+    assert client.session.calls == 4
+
+
+# ---------------------------------------------------- malformed data and input
+
+
+@pytest.mark.parametrize(
+    "url,expected",
+    [
+        ("https://detail.m.1688.com/page/index.html?offerId=612345678901", "612345678901"),
+        ("https://detail.1688.com/offer/612345678901.html?id=999999", "612345678901"),
+        ("https://item.taobao.com/item.htm?id=600530677383", "600530677383"),
+    ],
+)
+def test_the_listing_id_is_read_from_the_right_place(url, expected):
+    assert actor_main.item_id_from_url(url) == expected
+
+
+@pytest.mark.parametrize("bad", ["http://[bad/x.jpg", "https://", "https:///photo.jpg"])
+def test_a_malformed_image_address_gets_the_plain_refusal(bad):
+    with pytest.raises(source_mod.SourceError, match="public http"):
+        source_mod.validate_image_url(bad)
+
+
+def test_a_host_name_too_long_to_resolve_is_not_a_crash():
+    assert source_mod._resolves_inside("https://" + "a" * 300 + ".com/x.jpg") is False
+
+
+def test_a_hit_that_cannot_be_normalised_comes_back_unbilled(monkeypatch):
+    def boom(*args, **kwargs):
+        raise OverflowError("bad hit")
+
+    monkeypatch.setattr(actor_main.normalize_mod, "normalize_search_entry", boom)
+    product = actor_main._normalize_hit(
+        {"Id": "abb-612345678901"},
+        platform="1688",
+        quantity=None,
+        config=source_mod.otapi_1688_config("k"),
+    )
+    assert product.status == "unparsable"
+    assert product.item_id == "612345678901"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), "1" * 400])
+def test_numbers_that_are_not_finite_read_as_missing(value):
+    assert units.parse_price(value) is None
+    assert units.parse_quantity(value) is None
+
+
+def test_a_response_carrying_nan_reads_as_a_missing_value():
+    body = '{"ErrorCode": "Ok", "Result": {"Items": {"Items": {"Content": [{"Id": "abb-1", "Price": NaN}]}}}}'
+    assert _otapi_client(body).search_raw("x")[0]["Price"] is None
+
+
+# -------------------------------------------------------- what a record claims
+
+
+def _rung(low, high, price):
+    return PriceTier(min_qty=low, max_qty=high, unit_price=Money(value=price))
+
+
+def test_a_ladder_gap_is_not_reported_as_a_discount():
+    # Offer 863956881986: 46.8 and 40.8 are its first and last rungs.
+    tiers = [_rung(1, 49, 46.8), _rung(50, 199, 43.8), _rung(200, None, 40.8)]
+    assert _discount_pct(Money(value=40.8), Money(value=46.8), tiers) is None
+
+
+def test_a_real_promotion_below_the_ladder_is_still_a_discount():
+    # Offer 672715568844: 33.25 is under its cheapest rung of 35.
+    tiers = [_rung(1, 998, 40), _rung(999, None, 35)]
+    assert _discount_pct(Money(value=33.25), Money(value=35), tiers) == 5.0
+
+
+# ------------------------------------------------------------ several pictures
+
+
+def test_images_are_read_from_either_field_without_repeats():
+    assert actor_main._image_urls({"imageUrls": [IMAGE, f" {IMAGE} "], "imageUrl": IMAGE}) == [IMAGE]
+    assert actor_main._image_urls({"imageUrl": IMAGE}) == [IMAGE]
+    assert actor_main._image_urls({"imageUrls": IMAGE}) == [IMAGE]
+    assert actor_main._image_urls({}) == []
+
+
+def test_one_bad_image_in_a_list_is_refused():
+    with pytest.raises(source_mod.SourceError):
+        actor_main._image_urls({"imageUrls": [IMAGE, "photo.jpg"]})
+
+
+@pytest.mark.parametrize(
+    "limit,count,shares",
+    [(10, 3, [4, 3, 3]), (2, 3, [1, 1]), (0, 3, []), (-1, 2, [])],
+)
+def test_the_limit_is_shared_and_never_exceeded(limit, count, shares):
+    images = [f"https://example.com/{n}.jpg" for n in range(count)]
+    assert [share for _, share in actor_main._split_limit(limit, images)] == shares
+
+
+# ------------------------------------------------------------ order-cost rank
+
+
+def _quoted(item_id, subtotal, meets=True, match=1):
+    product = normalize_search_entry(
+        {"Id": f"abb-{item_id}", "OriginalTitle": "T恤"}, platform="1688",
+        config=source_mod.otapi_1688_config("k"),
+    )
+    product.match_rank = match
+    product.quote = Quote(quantity=100, subtotal=Money(value=subtotal), meets_minimum_order=meets)
+    return product
+
+
+def test_an_order_below_the_minimum_ranks_after_ones_that_can_be_placed():
+    cheap_but_too_small = _quoted("1", 100, meets=False, match=1)
+    dearer = _quoted("2", 300, match=2)
+    middle = _quoted("3", 200, match=3)
+    unquoted = _quoted("4", 1, match=4)
+    unquoted.quote = None
+    ranked = actor_main._rank_by_order_cost([cheap_but_too_small, dearer, middle, unquoted])
+    assert [p.item_id for p in ranked] == ["3", "2", "1", "4"]
+    assert [p.order_cost_rank for p in ranked] == [1, 2, 3, None]
+
+
+def test_equal_costs_keep_the_closer_match_first():
+    first, second = _quoted("1", 200, match=2), _quoted("2", 200, match=1)
+    assert [p.item_id for p in actor_main._rank_by_order_cost([first, second])] == ["2", "1"]

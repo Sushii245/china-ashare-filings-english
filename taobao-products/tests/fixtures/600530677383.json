@@ -1,0 +1,37 @@
+{
+  "item": {
+    "num_iid": "600530677383",
+    "title": "无线蓝牙耳机 入耳式降噪 长续航 适用苹果安卓",
+    "price": "128.00",
+    "price_range": "128.00-298.00",
+    "orginal_price": "￥358.00",
+    "sales": "月销1000+",
+    "num": "4532",
+    "post_fee": "包邮",
+    "location": "广东 深圳",
+    "nick": "数码旗舰店",
+    "seller_id": "2200731234567",
+    "min_num": "1件",
+    "presale_text": "现货,48小时内发货",
+    "item_imgs": [
+      {"url": "//img.alicdn.com/imgextra/i1/abc/O1CN01.jpg"},
+      {"url": "https://img.alicdn.com/imgextra/i2/abc/O1CN02.jpg"}
+    ],
+    "props_list": {
+      "1627207:28320": "颜色分类:黑色",
+      "20509:28314": "版本:标准版",
+      "122216431:38418984": "品牌:Soundcore"
+    },
+    "skus": {
+      "sku": [
+        {"sku_id": "5001", "properties_name": "1627207:28320:颜色分类:黑色;20509:28314:版本:标准版", "price": "128.00", "quantity": "2100"},
+        {"sku_id": "5002", "properties_name": "1627207:28321:颜色分类:白色;20509:28315:版本:降噪版", "price": "298.00", "quantity": "2432"}
+      ]
+    },
+    "shop_score": [
+      {"title": "宝贝描述", "score": "4.8", "compare": "高于同行20.15%"},
+      {"title": "卖家服务", "score": "4.7", "compare": "低于同行3.2%"},
+      {"title": "物流服务", "score": "4.9", "compare": "持平"}
+    ]
+  }
+}

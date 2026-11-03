@@ -1,0 +1,4 @@
+-r requirements.txt
+# The suite is run under both majors: 8.4 in a clean venv built from this
+# file, 9.1 in day-to-day development.
+pytest>=8.3,<10

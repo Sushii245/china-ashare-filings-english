@@ -1,0 +1,29 @@
+{
+  "platform": "1688",
+  "payload": {
+    "item": {
+      "num_iid": "612345678901",
+      "title": "厂家直销 纯棉T恤 空白打底衫 批发",
+      "price": "12.00",
+      "sales": "已售2万+",
+      "num": "99999",
+      "post_fee": "运费10元",
+      "location": "浙江 义乌",
+      "nick": "义乌服装厂",
+      "seller_id": "b2b-22012345",
+      "min_num": "起订量：2件",
+      "price_ranges": [
+        {"range": "2-99件", "price": "12.00"},
+        {"range": "100-999件", "price": "10.50"},
+        {"range": "≥1000件", "price": "9.00"}
+      ],
+      "props_list": [
+        {"name": "材质", "value": "纯棉"},
+        {"name": "克重", "value": "180g"}
+      ],
+      "skus": {"sku": {"sku_id": "9001", "properties_name": "颜色:白色", "price": "12.00", "quantity": "50000"}},
+      "item_imgs": "//cbu01.alicdn.com/img/ibank/x.jpg",
+      "shop_score": {"宝贝描述": "4.6", "卖家服务": "4.5", "物流服务": "4.4"}
+    }
+  }
+}

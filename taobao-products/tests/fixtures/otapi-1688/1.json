@@ -1,0 +1,15 @@
+{
+ "platform": "1688",
+ "status": "not_found",
+ "statusDetail": "NotFound: Item with id='1' not found.",
+ "payload": {
+  "ErrorCode": "NotFound",
+  "ErrorDescription": "Item with id='1' not found.",
+  "SubErrorCode": {
+   "Value": "ItemWithId"
+  },
+  "RequestId": "a3b3e6e7-9d81-4cd6-9320-1ac7ccd65ca9",
+  "RequestTime": 11.601600000000001
+ },
+ "note": "A real BatchGetItemFullInfo response captured 2026-10-20."
+}
