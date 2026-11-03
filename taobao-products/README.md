@@ -8,7 +8,8 @@
   ranked.
 - **A quote at your quantity.** Tell it how many pieces you want; each record
   carries the unit price at that quantity, the subtotal, and whether you clear
-  the seller's minimum.
+  the seller's minimum. Each photo's results then come back cheapest order
+  first.
 - **Filter by minimum order.** Set `maxMinOrderQuantity` to 2 and only sellers
   who take orders of 2 or fewer come back — useful for samples and first
   orders. Listings left out are never billed.
@@ -50,6 +51,12 @@ at your quantity, the minimum-order filter, the same records and the same
 prices. In a test, that listing's own main picture returned it second among
 the results, with similar T-shirts around it, and did the same from a host
 outside 1688.
+
+Set **Order quantity to price** as well, and each picture's results come back
+ordered by what your order would cost there, cheapest first, with
+`orderCostRank` saying where each stands. A listing whose minimum your quantity
+does not reach goes after those it does: the price is real, but you could not
+place that order. `matchRank` still records the order the visual match gave.
 
 Give several pictures and `maxProducts` is shared evenly across them, so a run
 of 5 pictures at 50 products returns up to 10 for each. Each picture is one

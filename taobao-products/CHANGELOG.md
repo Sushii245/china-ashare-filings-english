@@ -4,6 +4,10 @@
 
 On the Apify Store since 2026-10-20. Newest changes first.
 
+- With a quantity, each photo's results come back cheapest order first, with
+  `orderCostRank`. Listings the quantity cannot order sort after those it can.
+  They are held until the search is done, and the run's charge limit counts
+  them while they wait, so ranking never buys a record the run cannot pay for.
 - Repositioned around sourcing from a photo: renamed "1688 Image Search & Scraper
   — MOQ & Order Quotes", with image search first in the form and the README.
 - Search up to 20 pictures in one run with `imageUrls`. Max products is shared

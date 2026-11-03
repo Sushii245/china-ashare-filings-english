@@ -213,6 +213,9 @@ class Product:
     #: results. Empty unless the run searched by image.
     search_image_url: str | None = None
     match_rank: int | None = None
+    #: Where this listing's order cost ranks among the same picture's results,
+    #: 1 being the cheapest. Set only when a quantity was given.
+    order_cost_rank: int | None = None
 
     skus: list[Sku] = dataclasses.field(default_factory=list)
     #: How many variants the listing had, recorded before the array can be
@@ -229,6 +232,7 @@ class Product:
         return {
             "itemId": self.item_id,
             "matchRank": self.match_rank,
+            "orderCostRank": self.order_cost_rank,
             "searchImageUrl": self.search_image_url,
             "platform": self.platform,
             "url": self.url,

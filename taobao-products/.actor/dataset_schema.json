@@ -8,6 +8,7 @@
           "itemId",
           "status",
           "matchRank",
+          "orderCostRank",
           "titleCn",
           "titleEn",
           "price",
@@ -31,6 +32,9 @@
           },
           "matchRank": {
             "label": "Match rank"
+          },
+          "orderCostRank": {
+            "label": "Order cost rank"
           },
           "titleCn": {
             "label": "Title (CN)"

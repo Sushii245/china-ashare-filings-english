@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT))
 import actor_main  # noqa: E402
 import source as source_mod  # noqa: E402
 import units  # noqa: E402
-from models import Money, PriceTier  # noqa: E402
+from models import Money, PriceTier, Quote  # noqa: E402
 from normalize import _discount_pct, normalize_search_entry  # noqa: E402
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -607,3 +607,32 @@ def test_one_bad_image_in_a_list_is_refused():
 def test_the_limit_is_shared_and_never_exceeded(limit, count, shares):
     images = [f"https://example.com/{n}.jpg" for n in range(count)]
     assert [share for _, share in actor_main._split_limit(limit, images)] == shares
+
+
+# ------------------------------------------------------------ order-cost rank
+
+
+def _quoted(item_id, subtotal, meets=True, match=1):
+    product = normalize_search_entry(
+        {"Id": f"abb-{item_id}", "OriginalTitle": "T恤"}, platform="1688",
+        config=source_mod.otapi_1688_config("k"),
+    )
+    product.match_rank = match
+    product.quote = Quote(quantity=100, subtotal=Money(value=subtotal), meets_minimum_order=meets)
+    return product
+
+
+def test_an_order_below_the_minimum_ranks_after_ones_that_can_be_placed():
+    cheap_but_too_small = _quoted("1", 100, meets=False, match=1)
+    dearer = _quoted("2", 300, match=2)
+    middle = _quoted("3", 200, match=3)
+    unquoted = _quoted("4", 1, match=4)
+    unquoted.quote = None
+    ranked = actor_main._rank_by_order_cost([cheap_but_too_small, dearer, middle, unquoted])
+    assert [p.item_id for p in ranked] == ["3", "2", "1", "4"]
+    assert [p.order_cost_rank for p in ranked] == [1, 2, 3, None]
+
+
+def test_equal_costs_keep_the_closer_match_first():
+    first, second = _quoted("1", 200, match=2), _quoted("2", 200, match=1)
+    assert [p.item_id for p in actor_main._rank_by_order_cost([first, second])] == ["2", "1"]

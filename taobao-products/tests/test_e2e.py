@@ -512,6 +512,82 @@ def test_a_keyword_record_has_no_image_origin(tmp_path):
     assert run.records[0]["matchRank"] is None
 
 
+def _subtotals(records):
+    return [r["quote"]["subtotal"]["value"] for r in records]
+
+
+def test_with_a_quantity_each_photo_comes_back_cheapest_first(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE, SECOND_IMAGE], "detailLevel": "listing", "maxProducts": 10,
+         "quantity": 100, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.proc.returncode == 0, run.log
+    for url in (IMAGE, SECOND_IMAGE):
+        mine = [r for r in run.records if r["searchImageUrl"] == url]
+        priced = [r for r in mine if r["orderCostRank"] is not None]
+        assert [r["orderCostRank"] for r in priced] == list(range(1, len(priced) + 1))
+        assert _subtotals(priced) == sorted(_subtotals(priced))
+        assert sorted(r["matchRank"] for r in mine) == list(range(1, len(mine) + 1))
+    assert "Cheapest at 100 piece(s)" in run.log
+
+
+def test_full_detail_photo_results_come_back_cheapest_first(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE], "maxProducts": 3, "quantity": 100, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert run.proc.returncode == 0, run.log
+    ok = [r for r in run.records if r["status"] == "ok"]
+    assert ok and _subtotals(ok) == sorted(_subtotals(ok))
+    assert [r["orderCostRank"] for r in ok] == list(range(1, len(ok) + 1))
+
+
+def test_held_records_never_outrun_the_charge_limit(tmp_path):
+    # $0.004 covers two records at $0.002. Holding results back for ranking
+    # must not deliver, or bill, a third.
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE], "detailLevel": "listing", "maxProducts": 10,
+         "quantity": 100, "platform": "1688"},
+        **ppe(0.004),
+        **OTAPI_ENV,
+    )
+    assert run.proc.returncode == 0, run.log
+    assert len(run.records) == 2
+    assert [r["orderCostRank"] for r in run.records] == [1, 2]
+
+
+def test_held_full_detail_records_never_outrun_the_charge_limit(tmp_path):
+    # $0.01 covers two listings at $0.005. Held listings are unbilled while
+    # they wait, so the check before each batch must count them, or the run
+    # pays the data source for a third it can never deliver.
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE], "maxProducts": 3, "quantity": 100, "concurrency": 1, "platform": "1688"},
+        **ppe(0.01),
+        **OTAPI_ENV,
+    )
+    assert run.proc.returncode == 0, run.log
+    assert len(run.fetched) == 2
+    assert len([r for r in run.records if r["status"] == "ok"]) == 2
+
+
+def test_without_a_quantity_nothing_is_ranked_or_held(tmp_path):
+    run = run_actor(
+        tmp_path,
+        {"imageUrls": [IMAGE], "detailLevel": "listing", "maxProducts": 5, "platform": "1688"},
+        **ppe(1.0),
+        **OTAPI_ENV,
+    )
+    assert {r["orderCostRank"] for r in run.records} == {None}
+    assert [r["matchRank"] for r in run.records] == [1, 2, 3, 4, 5]
+
+
 def test_one_bad_hit_does_not_end_a_listing_run(tmp_path):
     # Records before the bad hit are already billed, so a crash here would
     # lose the status message and the hits after it.

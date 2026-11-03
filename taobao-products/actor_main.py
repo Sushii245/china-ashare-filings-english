@@ -198,6 +198,42 @@ def _split_limit(limit: int, images: list[str]) -> list[tuple[str, int]]:
     return [(url, share) for url, share in shares if share > 0]
 
 
+def _rank_by_order_cost(
+    products: list[normalize_mod.Product],
+) -> list[normalize_mod.Product]:
+    """Order one picture's results by what the order would cost, cheapest first.
+
+    A listing whose minimum the quantity does not reach goes after those it
+    does: its price is real, but the order cannot be placed as asked. A span
+    ranks on its low end. Listings with no quote keep their match order last.
+    """
+    priced = [p for p in products if p.quote is not None and p.quote.subtotal is not None]
+    priced.sort(
+        key=lambda p: (
+            p.quote.meets_minimum_order is False,
+            p.quote.subtotal.value,
+            p.match_rank or 0,
+        )
+    )
+    for rank, product in enumerate(priced, start=1):
+        product.order_cost_rank = rank
+    ranked = {id(p) for p in priced}
+    return priced + [p for p in products if id(p) not in ranked]
+
+
+def _log_cheapest(products: list[normalize_mod.Product], quantity: int) -> None:
+    """Name the cheapest order for one picture in the run log."""
+    best = next((p for p in products if p.order_cost_rank == 1), None)
+    if best is not None:
+        Actor.log.info(
+            "Cheapest at %d piece(s) for %s: %s, %s total.",
+            quantity,
+            best.search_image_url,
+            best.item_id,
+            best.quote.subtotal.value,
+        )
+
+
 def _max_moq(actor_input: dict[str, Any]) -> int | None:
     """The largest minimum order the buyer will accept, or None for no filter.
 
@@ -750,12 +786,17 @@ async def _run_listing_mode(
     max_pages = MAX_SEARCH_PAGES if max_moq is None else screen_pages
 
     charging = Actor.get_charging_manager()
-    while not stop and returned + skipped < limit and page <= max_pages:
+    # With a quantity, a picture's results are held until the search is done,
+    # so they can go out cheapest first. Held records are not billed yet, so
+    # every charge check below counts them as already spoken for.
+    ranking = bool(image_url and quantity)
+    waiting: list[normalize_mod.Product] = []
+    while not stop and returned + skipped + len(waiting) < limit and page <= max_pages:
         # A search page is one billed data-source call. If the run cannot pay
         # for even one more record, that call buys nothing deliverable.
         if is_ppe and charging.compute_push_data_limit(
-            1, EVENT_LISTED, is_default_dataset=True
-        ) <= 0:
+            len(waiting) + 1, EVENT_LISTED, is_default_dataset=True
+        ) <= len(waiting):
             Actor.log.warning(
                 "Run charge limit covers no more records; not requesting page %d.",
                 page,
@@ -779,7 +820,7 @@ async def _run_listing_mode(
 
         fresh = 0
         for entry in entries:
-            if returned + skipped >= limit:
+            if returned + skipped + len(waiting) >= limit:
                 break
             product = _normalize_hit(
                 entry, platform=platform, quantity=quantity, config=data_source.config
@@ -806,6 +847,9 @@ async def _run_listing_mode(
                 )
                 continue
 
+            if ranking:
+                waiting.append(product)
+                continue
             counted, stop = await _push_and_charge(
                 record, event=EVENT_LISTED, is_ppe=is_ppe, so_far=returned
             )
@@ -819,7 +863,7 @@ async def _run_listing_mode(
             page,
             len(entries),
             fresh,
-            returned,
+            returned + len(waiting),
         )
         # A provider that repeats a page when results run short would otherwise
         # keep costing a call per loop.
@@ -832,6 +876,17 @@ async def _run_listing_mode(
             break
         page += 1
 
+    if waiting:
+        ranked = _rank_by_order_cost(waiting)
+        _log_cheapest(ranked, quantity)
+        for product in ranked:
+            counted, stop = await _push_and_charge(
+                product.to_item(), event=EVENT_LISTED, is_ppe=is_ppe, so_far=returned
+            )
+            if counted:
+                returned += 1
+            if stop:
+                break
     if not stop and not search_error and page > max_pages and returned + skipped < limit:
         Actor.log.warning(
             "Stopped after %d search pages with %d record(s), because each page "
@@ -1097,6 +1152,11 @@ async def main() -> None:
         charging = Actor.get_charging_manager()
         pending = list(item_ids)
         done = 0
+        # Listings a picture found are held until every listing is fetched, so
+        # each picture's can go out cheapest first. Held ones are not billed
+        # yet, so the charge check before each batch counts them as spoken for.
+        ranking = bool(quantity and origins)
+        waiting: list[normalize_mod.Product] = []
         while pending:
             # Ask what the run can still pay for *before* fetching, not after.
             # A batch is fetched in parallel and only then pushed and billed,
@@ -1107,8 +1167,9 @@ async def main() -> None:
             wanted = min(concurrency, len(pending))
             size = (
                 charging.compute_push_data_limit(
-                    wanted, EVENT_PRODUCT, is_default_dataset=True
+                    len(waiting) + wanted, EVENT_PRODUCT, is_default_dataset=True
                 )
+                - len(waiting)
                 if is_ppe
                 else wanted
             )
@@ -1178,6 +1239,9 @@ async def main() -> None:
                     )
                     continue
 
+                if ranking and product.item_id in origins:
+                    waiting.append(product)
+                    continue
                 counted, hit_charge_limit = await _push_and_charge(
                     record, event=EVENT_PRODUCT, is_ppe=is_ppe, so_far=returned
                 )
@@ -1207,6 +1271,20 @@ async def main() -> None:
                 )
                 break
             tripped = None
+
+        for url in image_urls if waiting else ():
+            ranked = _rank_by_order_cost([p for p in waiting if p.search_image_url == url])
+            _log_cheapest(ranked, quantity)
+            for product in ranked:
+                counted, hit_charge_limit = await _push_and_charge(
+                    product.to_item(), event=EVENT_PRODUCT, is_ppe=is_ppe, so_far=returned
+                )
+                if counted:
+                    returned += 1
+                if hit_charge_limit:
+                    break
+            if hit_charge_limit:
+                break
 
         parts = [f"Returned {returned} of {len(item_ids)} listing(s)"]
         if skipped:
