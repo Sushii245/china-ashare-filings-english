@@ -565,15 +565,16 @@ def test_held_records_never_outrun_the_charge_limit(tmp_path):
 def test_held_full_detail_records_never_outrun_the_charge_limit(tmp_path):
     # $0.01 covers two listings at $0.005. Held listings are unbilled while
     # they wait, so the check before each batch must count them, or the run
-    # pays the data source for a third it can never deliver.
+    # pays the data source for a fourth it can never deliver. The first hit has
+    # no fixture: a not-found costs a call but no budget, so three are fetched.
     run = run_actor(
         tmp_path,
-        {"imageUrls": [IMAGE], "maxProducts": 3, "quantity": 100, "concurrency": 1, "platform": "1688"},
+        {"imageUrls": [IMAGE], "maxProducts": 5, "quantity": 100, "concurrency": 1, "platform": "1688"},
         **ppe(0.01),
         **OTAPI_ENV,
     )
     assert run.proc.returncode == 0, run.log
-    assert len(run.fetched) == 2
+    assert run.fetched == ["44153134578", "623219903269", "669724481680"]
     assert len([r for r in run.records if r["status"] == "ok"]) == 2
 
 
