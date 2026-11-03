@@ -33,6 +33,12 @@ Actor does it: tell it how many pieces you want and each record
 comes back with the unit price at that quantity, the subtotal, and whether you
 clear the seller's minimum.
 
+**Try it in one click:**
+[cheapest supplier from a photo](https://apify.com/clifford_x/1688-wholesale-products/examples/photo-to-cheapest-supplier) ·
+[supplier details from a photo](https://apify.com/clifford_x/1688-wholesale-products/examples/photo-to-supplier-details) ·
+[sellers who take sample orders](https://apify.com/clifford_x/1688-wholesale-products/examples/sample-order-sellers) ·
+[price a listing at your quantity](https://apify.com/clifford_x/1688-wholesale-products/examples/price-a-1688-listing)
+
 ---
 
 ## Search by image — 1688 reverse image search
